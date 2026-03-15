@@ -123,6 +123,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       this.pollingInterval,
       (alerts) => this.alertHandler!.handleRealtimeAlerts(alerts),
       (history) => this.alertHandler!.handleHistoryAlerts(history),
+      () => this.alertHandler!.hasActiveAlerts(),
     );
 
     this.orefClient.start();

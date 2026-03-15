@@ -13,6 +13,7 @@ export class OrefClient {
     private readonly pollingInterval: number,
     private readonly onRealtimeAlerts: (alerts: OrefRealtimeAlert[]) => void,
     private readonly onHistoryAlerts: (alerts: OrefHistoryAlert[]) => void,
+    private readonly hasActiveAlerts: () => boolean,
   ) {}
 
   start() {
@@ -45,16 +46,18 @@ export class OrefClient {
         this.log.error(`Failed to fetch alerts: ${err}`);
       });
 
-    const historyPromise = this.fetchJson<OrefHistoryAlert>(OREF_HISTORY_URL)
-      .then((history) => {
-        if (!_.isEmpty(history)) {
-          this.log.easyDebug(() => `Raw history: ${JSON.stringify(history)}`);
-        }
-        this.onHistoryAlerts(history);
-      })
-      .catch((err) => {
-        this.log.error(`Failed to fetch history: ${err}`);
-      });
+    const historyPromise = this.hasActiveAlerts()
+      ? this.fetchJson<OrefHistoryAlert>(OREF_HISTORY_URL)
+        .then((history) => {
+          if (!_.isEmpty(history)) {
+            this.log.easyDebug(() => `Raw history: ${JSON.stringify(history)}`);
+          }
+          this.onHistoryAlerts(history);
+        })
+        .catch((err) => {
+          this.log.error(`Failed to fetch history: ${err}`);
+        })
+      : Promise.resolve();
 
     Promise.all([alertsPromise, historyPromise])
       .finally(() => {

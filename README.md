@@ -33,6 +33,7 @@ Configure via the Homebridge UI or manually in `config.json`:
   "platform": "RedAlert",
   "cities": "תל אביב, חיפה",
   "categories": ["rockets", "uav", "earthquake", "terror"],
+  "alert_timeout": 10,
   "polling_interval": 1000,
   "debug": false
 }
@@ -44,6 +45,7 @@ Configure via the Homebridge UI or manually in `config.json`:
 |--------|----------|---------|-------------|
 | `cities` | Yes | — | City names in Hebrew, comma-separated. Must match Pikud HaOref naming exactly. |
 | `categories` | No | All | Alert types to monitor. If empty, all categories are enabled. |
+| `alert_timeout` | No | 10 | Safety fallback: auto-clear alerts after this many minutes if "Event Ended" is never received (1–60). |
 | `polling_interval` | No | 1000 | How often to poll the API in milliseconds (500–5000). |
 | `debug` | No | false | Enable extra debug logging. |
 
@@ -66,7 +68,8 @@ Configure via the Homebridge UI or manually in `config.json`:
 - The plugin creates a single **motion sensor** in HomeKit.
 - It polls the Pikud HaOref API every second (configurable).
 - When an alert matches your cities and selected categories, the motion sensor turns **ON**.
-- When the alert clears from the API, the motion sensor turns **OFF**.
+- The sensor stays **ON** until Pikud HaOref sends an "Event Ended" message for your city.
+- If "Event Ended" is never received (API issue), the alert auto-clears after the configured timeout (default: 10 minutes).
 - You can create HomeKit automations based on the motion sensor (e.g. flash lights, play a sound, send a notification).
 
 ## License

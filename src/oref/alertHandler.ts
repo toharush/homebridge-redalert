@@ -17,6 +17,10 @@ export class AlertHandler {
     this.citySet = new Set(cities);
   }
 
+  hasActiveAlerts(): boolean {
+    return this.activeCities.size > 0;
+  }
+
   handleRealtimeAlerts(alerts: OrefRealtimeAlert[]): void {
     for (const alert of alerts) {
       const cat = parseInt(alert.cat, 10);
