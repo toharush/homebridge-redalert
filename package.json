@@ -15,7 +15,8 @@
     "watch": "npm run build && npm link && nodemon",
     "build": "rimraf ./dist && tsc",
     "test": "tsx --test src/**/*.spec.ts",
-    "prepublishOnly": "npm run lint && npm run build"
+    "prepublishOnly": "npm run lint && npm run build",
+    "first-publish": "npm publish --access public"
   },
   "keywords": [
     "homebridge-plugin",
