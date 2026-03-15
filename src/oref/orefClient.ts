@@ -35,6 +35,9 @@ export class OrefClient {
 
     this.fetchAlerts()
       .then((alerts) => {
+        if (!_.isEmpty(alerts)) {
+          this.log.easyDebug(() => `Raw alerts: ${JSON.stringify(alerts)}`);
+        }
         this.onAlerts(alerts);
       })
       .catch((err) => {
