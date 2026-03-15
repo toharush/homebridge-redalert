@@ -122,5 +122,3 @@ dist
 config.save.json
 
 .claude
-
-package-lock.json

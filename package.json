@@ -1,7 +1,7 @@
 {
   "displayName": "Red Alert",
-  "name": "homebridge-redalert",
-  "version": "3.0.0",
+  "name": "@toharush/homebridge-redalert",
+  "version": "1.0.0",
   "author": "toharush",
   "description": "Homebridge plugin for Israeli Red Alert (Pikud HaOref) notifications via HomeKit motion sensors",
   "license": "Apache-2.0",
