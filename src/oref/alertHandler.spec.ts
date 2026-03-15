@@ -20,8 +20,12 @@ function createMockSensor() {
   let motion = false;
   return {
     getMotionDetected: () => motion,
-    setMotionDetected: (on: boolean) => { motion = on; },
-    get value() { return motion; },
+    setMotionDetected: (on: boolean) => {
+      motion = on;
+    },
+    get value() {
+      return motion;
+    },
   };
 }
 
