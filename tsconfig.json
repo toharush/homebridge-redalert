@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2018", // ~node10
+    "module": "commonjs",
+    "lib": [
+      "dom",
+      "es6",
+      "es6",
+    ],
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "noImplicitAny": false,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+
+  },
+  "include": [
+    "src/"
+  ],
+  "exclude": [
+    "**/*.spec.ts"
+  ]
+}
