@@ -1,8 +1,8 @@
 import https from 'https';
 import _ from 'lodash';
-import { OrefAlert } from '../types';
+import { OrefRealtimeAlert, OrefHistoryAlert } from '../types';
 import { DebugLogger } from '../utils/debugLogger';
-import { OREF_ALERTS_URL, OREF_HEADERS } from '../settings';
+import { OREF_ALERTS_URL, OREF_HISTORY_URL, OREF_HEADERS } from '../settings';
 
 export class OrefClient {
   private polling = false;
@@ -11,7 +11,8 @@ export class OrefClient {
   constructor(
     private readonly log: DebugLogger,
     private readonly pollingInterval: number,
-    private readonly onAlerts: (alerts: OrefAlert[]) => void,
+    private readonly onRealtimeAlerts: (alerts: OrefRealtimeAlert[]) => void,
+    private readonly onHistoryAlerts: (alerts: OrefHistoryAlert[]) => void,
   ) {}
 
   start() {
@@ -33,16 +34,29 @@ export class OrefClient {
       return;
     }
 
-    this.fetchAlerts()
+    const alertsPromise = this.fetchJson<OrefRealtimeAlert>(OREF_ALERTS_URL)
       .then((alerts) => {
         if (!_.isEmpty(alerts)) {
           this.log.easyDebug(() => `Raw alerts: ${JSON.stringify(alerts)}`);
         }
-        this.onAlerts(alerts);
+        this.onRealtimeAlerts(alerts);
       })
       .catch((err) => {
-        this.log.easyDebug(() => `Oref poll error: ${err}`);
+        this.log.error(`Failed to fetch alerts: ${err}`);
+      });
+
+    const historyPromise = this.fetchJson<OrefHistoryAlert>(OREF_HISTORY_URL)
+      .then((history) => {
+        if (!_.isEmpty(history)) {
+          this.log.easyDebug(() => `Raw history: ${JSON.stringify(history)}`);
+        }
+        this.onHistoryAlerts(history);
       })
+      .catch((err) => {
+        this.log.error(`Failed to fetch history: ${err}`);
+      });
+
+    Promise.all([alertsPromise, historyPromise])
       .finally(() => {
         if (this.polling) {
           this.pollTimer = setTimeout(() => this.poll(), this.pollingInterval);
@@ -50,9 +64,9 @@ export class OrefClient {
       });
   }
 
-  private fetchAlerts(): Promise<OrefAlert[]> {
+  private fetchJson<T>(url: string): Promise<T[]> {
     return new Promise((resolve, reject) => {
-      const req = https.get(OREF_ALERTS_URL, { headers: OREF_HEADERS }, (res) => {
+      const req = https.get(url, { headers: OREF_HEADERS }, (res) => {
         const chunks: Buffer[] = [];
         res.on('data', (chunk: Buffer) => chunks.push(chunk));
         res.on('end', () => {
@@ -64,7 +78,7 @@ export class OrefClient {
               return;
             }
             const parsed = JSON.parse(cleaned);
-            resolve(_.isArray(parsed) ? parsed as OrefAlert[] : []);
+            resolve(_.isArray(parsed) ? parsed as T[] : [parsed as T]);
           } catch {
             resolve([]);
           }
@@ -73,7 +87,7 @@ export class OrefClient {
       req.on('error', reject);
       req.setTimeout(5000, () => {
         req.destroy();
-        reject(new Error('Oref request timeout'));
+        reject(new Error('Request timeout'));
       });
     });
   }

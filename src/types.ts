@@ -15,7 +15,17 @@ export interface CachedService {
   setMotionDetected: (on: boolean) => void;
 }
 
-export interface OrefAlert {
+// Real-time alert from alerts.json
+export interface OrefRealtimeAlert {
+  id: string;
+  cat: string;
+  title: string;
+  data: string[];
+  desc: string;
+}
+
+// History alert from AlertsHistory.json
+export interface OrefHistoryAlert {
   alertDate: string;
   title: string;
   data: string;

@@ -3,9 +3,12 @@ export const PLUGIN_NAME = "@toharush/homebridge-redalert";
 
 export const OREF_ALERTS_URL =
   "https://www.oref.org.il/WarningMessages/alert/alerts.json";
+export const OREF_HISTORY_URL =
+  "https://www.oref.org.il/WarningMessages/alert/History/AlertsHistory.json";
 export const OREF_HEADERS = {
   Referer: "https://www.oref.org.il/",
   "X-Requested-With": "XMLHttpRequest",
 };
 
 export const DEFAULT_POLLING_INTERVAL = 1000;
+export const DEFAULT_ALERT_TIMEOUT = 10; // minutes

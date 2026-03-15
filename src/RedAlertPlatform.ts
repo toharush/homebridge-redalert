@@ -1,5 +1,5 @@
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
-import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_POLLING_INTERVAL } from './settings';
+import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_POLLING_INTERVAL, DEFAULT_ALERT_TIMEOUT } from './settings';
 import _ from 'lodash';
 import { CATEGORY_MAP, ALL_CATEGORY_KEYS } from './types';
 import { validateConfig } from './utils/configValidator';
@@ -15,6 +15,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
   private readonly log: DebugLogger;
   private readonly cities: string[] = [];
   private readonly pollingInterval: number;
+  private readonly alertTimeout: number;
   private readonly allowedCategories: Set<number>;
   private readonly accessoryUUID: string;
 
@@ -28,6 +29,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     public readonly api: API,
   ) {
     this.pollingInterval = _.get(config, 'polling_interval', DEFAULT_POLLING_INTERVAL);
+    this.alertTimeout = _.get(config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT);
     this.log = createDebugLogger(log, _.get(config, 'debug', false));
     this.accessoryUUID = this.api.hap.uuid.generate(PLATFORM_NAME);
 
@@ -60,9 +62,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       this.log.easyDebug(`Loading accessory from cache: ${accessory.displayName}`);
 
       const service = accessory.getService('alerts');
-      if (service) {
-        service.setCharacteristic(this.Characteristic.MotionDetected, false);
-      } else {
+      if (!service) {
         accessory.addService(this.api.hap.Service.MotionSensor, 'Red Alert', 'alerts');
       }
 
@@ -115,12 +115,14 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
           service.updateCharacteristic(this.Characteristic.MotionDetected, on);
         },
       },
+      this.alertTimeout,
     );
 
     this.orefClient = new OrefClient(
       this.log,
       this.pollingInterval,
-      (alerts) => this.alertHandler!.handleAlerts(alerts),
+      (alerts) => this.alertHandler!.handleRealtimeAlerts(alerts),
+      (history) => this.alertHandler!.handleHistoryAlerts(history),
     );
 
     this.orefClient.start();

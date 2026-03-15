@@ -44,6 +44,15 @@
           }
         }
       },
+      "alert_timeout": {
+        "title": "Alert Timeout (minutes)",
+        "description": "Safety fallback: if 'Event Ended' is never received, the alert will auto-clear after this many minutes. Default is 10 minutes.",
+        "type": "number",
+        "required": false,
+        "default": 10,
+        "minimum": 1,
+        "maximum": 60
+      },
       "polling_interval": {
         "title": "Polling interval in milliseconds",
         "description": "How often to check for new alerts. Default is 1000ms (1 second). Lower values are faster but use more bandwidth.",

@@ -39,6 +39,25 @@ function allCategoryIds(): Set<number> {
   return ids;
 }
 
+function makeRealtimeAlert(cat: OrefCategory, cities: string[]) {
+  return {
+    id: '134180679120000000',
+    cat: String(cat),
+    title: 'test alert',
+    data: cities,
+    desc: 'היכנסו מייד למרחב המוגן',
+  };
+}
+
+function makeHistoryAlert(category: OrefCategory, city: string) {
+  return {
+    alertDate: '2026-03-15 19:00:00',
+    title: 'האירוע הסתיים',
+    data: city,
+    category,
+  };
+}
+
 describe('AlertHandler', () => {
   const cities = ['תל אביב', 'חיפה'];
   let log: any;
@@ -52,63 +71,49 @@ describe('AlertHandler', () => {
   });
 
   it('should trigger sensor for matching city', () => {
-    handler.handleAlerts([{
-      alertDate: '2024-01-01 12:00:00',
-      title: 'ירי רקטות',
-      data: 'תל אביב',
-      category: OrefCategory.Rockets,
-    }]);
+    handler.handleRealtimeAlerts([makeRealtimeAlert(OrefCategory.Rockets, ['תל אביב'])]);
     assert.strictEqual(sensor.value, true);
   });
 
-  it('should turn off sensor when alerts clear', () => {
-    handler.handleAlerts([{
-      alertDate: '2024-01-01 12:00:00',
-      title: 'ירי רקטות',
-      data: 'תל אביב',
-      category: OrefCategory.Rockets,
-    }]);
+  it('should trigger when matching city is in array with others', () => {
+    handler.handleRealtimeAlerts([makeRealtimeAlert(OrefCategory.Rockets, ['באר שבע', 'חיפה', 'אשדוד'])]);
+    assert.strictEqual(sensor.value, true);
+  });
+
+  it('should NOT turn off sensor when realtime alerts clear', () => {
+    handler.handleRealtimeAlerts([makeRealtimeAlert(OrefCategory.Rockets, ['תל אביב'])]);
     assert.strictEqual(sensor.value, true);
 
-    handler.handleAlerts([]);
+    handler.handleRealtimeAlerts([]);
+    assert.strictEqual(sensor.value, true, 'Sensor should stay on until EventEnded');
+  });
+
+  it('should turn off sensor when EventEnded received for city', () => {
+    handler.handleRealtimeAlerts([makeRealtimeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(sensor.value, true);
+
+    handler.handleHistoryAlerts([makeHistoryAlert(OrefCategory.EventEnded, 'תל אביב')]);
     assert.strictEqual(sensor.value, false);
   });
 
-  it('should turn off sensor when city disappears from alerts', () => {
-    handler.handleAlerts([{
-      alertDate: '2024-01-01 12:00:00',
-      title: 'ירי רקטות',
-      data: 'תל אביב',
-      category: OrefCategory.Rockets,
-    }]);
+  it('should stay on if EventEnded only for some cities', () => {
+    handler.handleRealtimeAlerts([makeRealtimeAlert(OrefCategory.Rockets, ['תל אביב', 'חיפה'])]);
     assert.strictEqual(sensor.value, true);
 
-    handler.handleAlerts([{
-      alertDate: '2024-01-01 12:00:00',
-      title: 'ירי רקטות',
-      data: 'באר שבע',
-      category: OrefCategory.Rockets,
-    }]);
+    handler.handleHistoryAlerts([makeHistoryAlert(OrefCategory.EventEnded, 'תל אביב')]);
+    assert.strictEqual(sensor.value, true, 'Sensor should stay on - חיפה still active');
+
+    handler.handleHistoryAlerts([makeHistoryAlert(OrefCategory.EventEnded, 'חיפה')]);
     assert.strictEqual(sensor.value, false);
   });
 
   it('should not trigger for cities not in config', () => {
-    handler.handleAlerts([{
-      alertDate: '2024-01-01 12:00:00',
-      title: 'ירי רקטות',
-      data: 'באר שבע',
-      category: OrefCategory.Rockets,
-    }]);
+    handler.handleRealtimeAlerts([makeRealtimeAlert(OrefCategory.Rockets, ['באר שבע'])]);
     assert.strictEqual(sensor.value, false);
   });
 
-  it('should ignore EventEnded category', () => {
-    handler.handleAlerts([{
-      alertDate: '2024-01-01 12:00:00',
-      title: 'האירוע הסתיים',
-      data: 'תל אביב',
-      category: OrefCategory.EventEnded,
-    }]);
+  it('should ignore EventEnded in realtime alerts', () => {
+    handler.handleRealtimeAlerts([makeRealtimeAlert(OrefCategory.EventEnded, ['תל אביב'])]);
     assert.strictEqual(sensor.value, false);
   });
 
@@ -116,39 +121,37 @@ describe('AlertHandler', () => {
     const rocketsOnly = new Set(CATEGORY_MAP['rockets']);
     const filtered = new AlertHandler(log, cities, rocketsOnly, sensor);
 
-    filtered.handleAlerts([{
-      alertDate: '2024-01-01 12:00:00',
-      title: 'חדירת מחבלים',
-      data: 'תל אביב',
-      category: OrefCategory.TerroristInfiltration,
-    }]);
+    filtered.handleRealtimeAlerts([makeRealtimeAlert(OrefCategory.TerroristInfiltration, ['תל אביב'])]);
     assert.strictEqual(sensor.value, false);
 
-    filtered.handleAlerts([{
-      alertDate: '2024-01-01 12:00:01',
-      title: 'ירי רקטות',
-      data: 'תל אביב',
-      category: OrefCategory.Rockets,
-    }]);
+    filtered.handleRealtimeAlerts([makeRealtimeAlert(OrefCategory.Rockets, ['תל אביב'])]);
     assert.strictEqual(sensor.value, true);
   });
 
-  it('should only log once while alert persists', () => {
-    const alert = {
-      alertDate: '2024-01-01 12:00:00',
-      title: 'ירי רקטות',
-      data: 'תל אביב',
-      category: OrefCategory.Rockets,
-    };
+  it('should only log once per city while alert persists', () => {
+    const alert = makeRealtimeAlert(OrefCategory.Rockets, ['תל אביב']);
 
-    handler.handleAlerts([alert]);
-    handler.handleAlerts([alert]);
-    handler.handleAlerts([alert]);
+    handler.handleRealtimeAlerts([alert]);
+    handler.handleRealtimeAlerts([alert]);
+    handler.handleRealtimeAlerts([alert]);
 
     const alertLogs = log.info.mock.calls.filter(
       (c: any) => c.arguments[0].startsWith('ALERT:'),
     );
     assert.strictEqual(alertLogs.length, 1);
+  });
+
+  it('should skip alerts with invalid category', () => {
+    const badAlert = {
+      id: '1',
+      cat: 'invalid',
+      title: 'bad',
+      data: ['תל אביב'],
+      desc: '',
+    };
+    handler.handleRealtimeAlerts([badAlert]);
+    assert.strictEqual(sensor.value, false);
+    assert.strictEqual(log.warn.mock.calls.length, 1);
   });
 });
 
