@@ -21,7 +21,7 @@ The plugin polls the official Pikud HaOref API directly — no Telegram, no midd
 Search for `redalert` in the Homebridge plugin search, or install manually:
 
 ```
-npm install -g homebridge-redalert
+npm install -g @toharush/homebridge-redalert
 ```
 
 ## Configuration
