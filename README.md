@@ -74,4 +74,4 @@ Configure via the Homebridge UI or manually in `config.json`:
 
 ## License
 
-Apache-2.0
+MIT
