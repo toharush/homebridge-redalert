@@ -1,8 +1,8 @@
 import https from 'https';
 import _ from 'lodash';
-import { OrefRealtimeAlert, OrefHistoryAlert } from '../types';
+import { OrefRealtimeAlert } from '../types';
 import { DebugLogger } from '../utils/debugLogger';
-import { OREF_ALERTS_URL, OREF_HISTORY_URL, OREF_HEADERS } from '../settings';
+import { OREF_ALERTS_URL, OREF_HEADERS } from '../settings';
 
 export class OrefClient {
   private polling = false;
@@ -12,8 +12,6 @@ export class OrefClient {
     private readonly log: DebugLogger,
     private readonly pollingInterval: number,
     private readonly onRealtimeAlerts: (alerts: OrefRealtimeAlert[]) => void,
-    private readonly onHistoryAlerts: (alerts: OrefHistoryAlert[]) => void,
-    private readonly hasActiveAlerts: () => boolean,
   ) {}
 
   start() {
@@ -35,7 +33,7 @@ export class OrefClient {
       return;
     }
 
-    const alertsPromise = this.fetchJson<OrefRealtimeAlert>(OREF_ALERTS_URL)
+    this.fetchJson<OrefRealtimeAlert>(OREF_ALERTS_URL)
       .then((alerts) => {
         if (!_.isEmpty(alerts)) {
           this.log.easyDebug(() => `Raw alerts: ${JSON.stringify(alerts)}`);
@@ -44,22 +42,7 @@ export class OrefClient {
       })
       .catch((err) => {
         this.log.error(`Failed to fetch alerts: ${err}`);
-      });
-
-    const historyPromise = this.hasActiveAlerts()
-      ? this.fetchJson<OrefHistoryAlert>(OREF_HISTORY_URL)
-        .then((history) => {
-          if (!_.isEmpty(history)) {
-            this.log.easyDebug(() => `Raw history: ${JSON.stringify(history)}`);
-          }
-          this.onHistoryAlerts(history);
-        })
-        .catch((err) => {
-          this.log.error(`Failed to fetch history: ${err}`);
-        })
-      : Promise.resolve();
-
-    Promise.all([alertsPromise, historyPromise])
+      })
       .finally(() => {
         if (this.polling) {
           this.pollTimer = setTimeout(() => this.poll(), this.pollingInterval);

@@ -24,56 +24,44 @@ export interface OrefRealtimeAlert {
   desc: string;
 }
 
-// History alert from AlertsHistory.json
-export interface OrefHistoryAlert {
-  alertDate: string;
-  title: string;
-  data: string;
-  category: number;
-}
-
-// Category IDs from https://www.oref.org.il/alerts/alertCategories.json
+// Real-time alert category IDs (matrix_id from alertCategories.json)
 export enum OrefCategory {
   Rockets = 1,
-  UAVIntrusion = 2,
-  NonConventional = 3,
-  Warning = 4,
-  EarthquakeAlert = 7,
-  EarthquakeWarning = 8,
-  CBRNE = 9,
-  TerroristInfiltration = 10,
-  Tsunami = 11,
-  HazardousMaterials = 12,
-  EventEnded = 13,
-  Flash = 14,
+  NonConventional = 2,
+  Earthquake = 3,
+  CBRNE = 4,
+  Tsunami = 5,
+  UAVIntrusion = 6,
+  HazardousMaterials = 7,
+  Warning = 8,
+  EventEnded = 10,
+  TerroristInfiltration = 13,
 }
 
 const CATEGORY_NAMES = new Map<number, string>([
   [OrefCategory.Rockets, 'rockets'],
-  [OrefCategory.UAVIntrusion, 'uav'],
   [OrefCategory.NonConventional, 'nonconventional'],
-  [OrefCategory.Warning, 'warning'],
-  [OrefCategory.EarthquakeAlert, 'earthquake'],
-  [OrefCategory.EarthquakeWarning, 'earthquake'],
+  [OrefCategory.Earthquake, 'earthquake'],
   [OrefCategory.CBRNE, 'cbrne'],
-  [OrefCategory.TerroristInfiltration, 'terror'],
   [OrefCategory.Tsunami, 'tsunami'],
+  [OrefCategory.UAVIntrusion, 'uav'],
   [OrefCategory.HazardousMaterials, 'hazmat'],
+  [OrefCategory.Warning, 'warning'],
   [OrefCategory.EventEnded, 'event_ended'],
-  [OrefCategory.Flash, 'flash'],
+  [OrefCategory.TerroristInfiltration, 'terror'],
 ]);
 
 export function getCategoryName(category: number): string {
   return CATEGORY_NAMES.get(category) || 'unknown';
 }
 
-// Maps config checkbox values to OrefCategory IDs
+// Maps config checkbox values to OrefCategory IDs (matrix_id)
 export const CATEGORY_MAP: Record<string, number[]> = {
   rockets: [OrefCategory.Rockets],
   uav: [OrefCategory.UAVIntrusion],
   nonconventional: [OrefCategory.NonConventional],
   warning: [OrefCategory.Warning],
-  earthquake: [OrefCategory.EarthquakeAlert, OrefCategory.EarthquakeWarning],
+  earthquake: [OrefCategory.Earthquake],
   cbrne: [OrefCategory.CBRNE],
   terror: [OrefCategory.TerroristInfiltration],
   tsunami: [OrefCategory.Tsunami],

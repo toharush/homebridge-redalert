@@ -1,4 +1,4 @@
-import { CachedService, OrefRealtimeAlert, OrefHistoryAlert, OrefCategory } from '../types';
+import { CachedService, OrefRealtimeAlert, OrefCategory } from '../types';
 import { DebugLogger } from '../utils/debugLogger';
 
 export class AlertHandler {
@@ -17,10 +17,6 @@ export class AlertHandler {
     this.citySet = new Set(cities);
   }
 
-  hasActiveAlerts(): boolean {
-    return this.activeCities.size > 0;
-  }
-
   handleRealtimeAlerts(alerts: OrefRealtimeAlert[]): void {
     for (const alert of alerts) {
       const cat = parseInt(alert.cat, 10);
@@ -28,7 +24,13 @@ export class AlertHandler {
         this.log.warn(`Skipping alert with invalid category: ${alert.cat}`);
         continue;
       }
-      if (cat === OrefCategory.EventEnded || !this.allowedCategories.has(cat)) {
+
+      if (cat === OrefCategory.EventEnded) {
+        this.handleEventEnded(alert);
+        continue;
+      }
+
+      if (!this.allowedCategories.has(cat)) {
         continue;
       }
 
@@ -45,19 +47,13 @@ export class AlertHandler {
     this.updateSensor();
   }
 
-  handleHistoryAlerts(alerts: OrefHistoryAlert[]): void {
-    for (const alert of alerts) {
-      if (alert.category !== OrefCategory.EventEnded) {
-        continue;
-      }
-
-      if (this.activeCities.has(alert.data)) {
-        this.activeCities.delete(alert.data);
-        this.log.info(`Event ended: ${alert.data}`);
+  private handleEventEnded(alert: OrefRealtimeAlert): void {
+    for (const city of alert.data) {
+      if (this.activeCities.has(city)) {
+        this.activeCities.delete(city);
+        this.log.info(`Event ended: ${city}`);
       }
     }
-
-    this.updateSensor();
   }
 
   private expireStaleAlerts(): void {

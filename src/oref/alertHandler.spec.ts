@@ -1,7 +1,7 @@
 import { describe, it, mock, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { AlertHandler } from './alertHandler';
-import { OrefCategory, CATEGORY_MAP, getCategoryName } from '../types';
+import { OrefCategory, CATEGORY_MAP, getCategoryName, OrefRealtimeAlert } from '../types';
 
 function createMockLogger() {
   return {
@@ -49,12 +49,13 @@ function makeRealtimeAlert(cat: OrefCategory, cities: string[]) {
   };
 }
 
-function makeHistoryAlert(category: OrefCategory, city: string) {
+function makeEventEndedAlert(cities: string[]): OrefRealtimeAlert {
   return {
-    alertDate: '2026-03-15 19:00:00',
+    id: '134180724020000000',
+    cat: String(OrefCategory.EventEnded),
     title: 'האירוע הסתיים',
-    data: city,
-    category,
+    data: cities,
+    desc: 'השוהים במרחב המוגן יכולים לצאת.',
   };
 }
 
@@ -92,7 +93,7 @@ describe('AlertHandler', () => {
     handler.handleRealtimeAlerts([makeRealtimeAlert(OrefCategory.Rockets, ['תל אביב'])]);
     assert.strictEqual(sensor.value, true);
 
-    handler.handleHistoryAlerts([makeHistoryAlert(OrefCategory.EventEnded, 'תל אביב')]);
+    handler.handleRealtimeAlerts([makeEventEndedAlert(['תל אביב'])]);
     assert.strictEqual(sensor.value, false);
   });
 
@@ -100,10 +101,10 @@ describe('AlertHandler', () => {
     handler.handleRealtimeAlerts([makeRealtimeAlert(OrefCategory.Rockets, ['תל אביב', 'חיפה'])]);
     assert.strictEqual(sensor.value, true);
 
-    handler.handleHistoryAlerts([makeHistoryAlert(OrefCategory.EventEnded, 'תל אביב')]);
+    handler.handleRealtimeAlerts([makeEventEndedAlert(['תל אביב'])]);
     assert.strictEqual(sensor.value, true, 'Sensor should stay on - חיפה still active');
 
-    handler.handleHistoryAlerts([makeHistoryAlert(OrefCategory.EventEnded, 'חיפה')]);
+    handler.handleRealtimeAlerts([makeEventEndedAlert(['חיפה'])]);
     assert.strictEqual(sensor.value, false);
   });
 
@@ -112,8 +113,8 @@ describe('AlertHandler', () => {
     assert.strictEqual(sensor.value, false);
   });
 
-  it('should ignore EventEnded in realtime alerts', () => {
-    handler.handleRealtimeAlerts([makeRealtimeAlert(OrefCategory.EventEnded, ['תל אביב'])]);
+  it('should not trigger sensor for event-ended alert without prior active alert', () => {
+    handler.handleRealtimeAlerts([makeEventEndedAlert(['תל אביב'])]);
     assert.strictEqual(sensor.value, false);
   });
 
@@ -158,17 +159,15 @@ describe('AlertHandler', () => {
 describe('getCategoryName', () => {
   it('should return correct names for known categories', () => {
     assert.strictEqual(getCategoryName(OrefCategory.Rockets), 'rockets');
-    assert.strictEqual(getCategoryName(OrefCategory.UAVIntrusion), 'uav');
     assert.strictEqual(getCategoryName(OrefCategory.NonConventional), 'nonconventional');
-    assert.strictEqual(getCategoryName(OrefCategory.Warning), 'warning');
-    assert.strictEqual(getCategoryName(OrefCategory.EarthquakeAlert), 'earthquake');
-    assert.strictEqual(getCategoryName(OrefCategory.EarthquakeWarning), 'earthquake');
+    assert.strictEqual(getCategoryName(OrefCategory.Earthquake), 'earthquake');
     assert.strictEqual(getCategoryName(OrefCategory.CBRNE), 'cbrne');
-    assert.strictEqual(getCategoryName(OrefCategory.TerroristInfiltration), 'terror');
     assert.strictEqual(getCategoryName(OrefCategory.Tsunami), 'tsunami');
+    assert.strictEqual(getCategoryName(OrefCategory.UAVIntrusion), 'uav');
     assert.strictEqual(getCategoryName(OrefCategory.HazardousMaterials), 'hazmat');
+    assert.strictEqual(getCategoryName(OrefCategory.Warning), 'warning');
     assert.strictEqual(getCategoryName(OrefCategory.EventEnded), 'event_ended');
-    assert.strictEqual(getCategoryName(OrefCategory.Flash), 'flash');
+    assert.strictEqual(getCategoryName(OrefCategory.TerroristInfiltration), 'terror');
   });
 
   it('should return unknown for unrecognized categories', () => {
