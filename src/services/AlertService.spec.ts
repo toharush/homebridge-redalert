@@ -77,8 +77,9 @@ function createService(
   cities: string[],
   categories: Set<number>,
   client?: AlertClient,
+  prefixMatching?: boolean,
 ): AlertService {
-  return new AlertService(log, client || createMockClient(), cities, categories, 1000, 10);
+  return new AlertService(log, client || createMockClient(), cities, categories, 1000, 10, prefixMatching);
 }
 
 // Feed alerts directly without starting the polling loop
@@ -193,6 +194,38 @@ describe('AlertService', () => {
     feedAlerts(service, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
     feedAlerts(service, [makeEventEnded(['תל אביב'])]);
     assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should NOT prefix match when disabled', () => {
+    feedAlerts(service, [makeAlert(OrefCategory.Rockets, ['תל אביב - דרום העיר ויפו'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should prefix match sub-areas when enabled', () => {
+    const prefixService = createService(log, ['תל אביב'], allCategoryIds(), undefined, true);
+    prefixService.registerAccessory(accessory);
+
+    feedAlerts(prefixService, [makeAlert(OrefCategory.Rockets, ['תל אביב - דרום העיר ויפו'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+  });
+
+  it('should prefix match when configured city is more specific', () => {
+    const prefixService = createService(log, ['תל אביב - דרום העיר ויפו'], allCategoryIds(), undefined, true);
+    prefixService.registerAccessory(accessory);
+
+    feedAlerts(prefixService, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+  });
+
+  it('should allow re-trigger after event ended for same city', () => {
+    feedAlerts(service, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    feedAlerts(service, [makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+
+    feedAlerts(service, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
   });
 
   it('should poll and process alerts from client', async () => {
