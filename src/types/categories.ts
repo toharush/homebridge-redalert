@@ -9,7 +9,7 @@ const CATEGORY_NAMES = new Map<number, string>([
   [OrefCategory.UAVIntrusion, 'uav'],
   [OrefCategory.HazardousMaterials, 'hazmat'],
   [OrefCategory.Warning, 'warning'],
-  [OrefCategory.EventEnded, 'event_ended'],
+  [OrefCategory.HeadsUpNotice, 'headsup'],
   [OrefCategory.TerroristInfiltration, 'terror'],
 ]);
 
@@ -21,7 +21,7 @@ export const CATEGORY_MAP: Record<string, number[]> = {
   rockets: [OrefCategory.Rockets],
   uav: [OrefCategory.UAVIntrusion],
   nonconventional: [OrefCategory.NonConventional],
-  warning: [OrefCategory.Warning],
+  warning: [OrefCategory.Warning, OrefCategory.HeadsUpNotice],
   earthquake: [OrefCategory.Earthquake],
   cbrne: [OrefCategory.CBRNE],
   terror: [OrefCategory.TerroristInfiltration],

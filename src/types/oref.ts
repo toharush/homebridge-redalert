@@ -6,6 +6,8 @@ export interface OrefRealtimeAlert {
   desc: string;
 }
 
+export const EVENT_ENDED_TITLE = 'האירוע הסתיים';
+
 export enum OrefCategory {
   Rockets = 1,
   NonConventional = 2,
@@ -15,6 +17,6 @@ export enum OrefCategory {
   UAVIntrusion = 6,
   HazardousMaterials = 7,
   Warning = 8,
-  EventEnded = 10,
+  HeadsUpNotice = 10,
   TerroristInfiltration = 13,
 }
