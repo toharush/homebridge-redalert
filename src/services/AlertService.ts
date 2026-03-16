@@ -55,7 +55,10 @@ export class AlertService {
     const start = Date.now();
     this.client.fetchAlerts()
       .then((alerts) => {
-        this.log.easyDebug(() => `Fetch completed in ${Date.now() - start}ms`);
+        const elapsed = Date.now() - start;
+        if (elapsed > 2000) {
+          this.log.warn(`Slow API response: ${elapsed}ms`);
+        }
         this.handleAlerts(alerts);
       })
       .catch((err) => {
