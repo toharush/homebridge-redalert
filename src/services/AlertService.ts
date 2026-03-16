@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { OrefCategory, OrefRealtimeAlert, AlertState } from '../types';
+import { OrefRealtimeAlert, AlertState, EVENT_ENDED_TITLE } from '../types';
 import { DebugLogger } from '../utils/debugLogger';
 import { AlertClient } from '../clients/orefClient';
 
@@ -72,10 +72,12 @@ export class AlertService {
       this.log.easyDebug(() => `Raw alerts: ${JSON.stringify(alerts)}`);
     }
 
-    const endedAlerts = _.filter(alerts, (alert) => alert.cat === String(OrefCategory.EventEnded));
+    const isEventEnded = (alert: OrefRealtimeAlert) => alert.title === EVENT_ENDED_TITLE;
+
+    const endedAlerts = _.filter(alerts, isEventEnded);
     const relevantAlerts = _.filter(alerts, (alert) => {
       const categoryId = _.toInteger(alert.cat);
-      return categoryId > 0 && categoryId !== OrefCategory.EventEnded && this.allowedCategories.has(categoryId);
+      return categoryId > 0 && !isEventEnded(alert) && this.allowedCategories.has(categoryId);
     });
 
     // Clear cities from ended events

@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { OrefCategory, CATEGORY_MAP, getCategoryName, OrefRealtimeAlert, AlertState } from '../types';
+import { OrefCategory, CATEGORY_MAP, getCategoryName, OrefRealtimeAlert, AlertState, EVENT_ENDED_TITLE } from '../types';
 import { AlertClient } from '../clients/orefClient';
 import { AlertService, AlertAccessory } from './AlertService';
 
@@ -55,10 +55,20 @@ function makeAlert(cat: OrefCategory, cities: string[]): OrefRealtimeAlert {
 function makeEventEnded(cities: string[]): OrefRealtimeAlert {
   return {
     id: '134180724020000000',
-    cat: String(OrefCategory.EventEnded),
-    title: 'האירוע הסתיים',
+    cat: String(OrefCategory.HeadsUpNotice),
+    title: EVENT_ENDED_TITLE,
     data: cities,
     desc: 'השוהים במרחב המוגן יכולים לצאת.',
+  };
+}
+
+function makeHeadsUpNotice(cities: string[]): OrefRealtimeAlert {
+  return {
+    id: '134181295300000000',
+    cat: String(OrefCategory.HeadsUpNotice),
+    title: 'בדקות הקרובות צפויות להתקבל התרעות באזורך',
+    data: cities,
+    desc: 'על תושבי האזורים הבאים לשפר את המיקום למיגון המיטבי בקרבתך.',
   };
 }
 
@@ -165,6 +175,26 @@ describe('AlertService', () => {
     assert.strictEqual(second.lastState!.isActive, true);
   });
 
+  it('should trigger on heads-up notice (cat 10 with non-EventEnded title)', () => {
+    feedAlerts(service, [makeHeadsUpNotice(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+  });
+
+  it('should NOT treat heads-up notice as event ended', () => {
+    feedAlerts(service, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Heads-up notice is cat 10 but should NOT clear the active alert
+    feedAlerts(service, [makeHeadsUpNotice(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+  });
+
+  it('should only treat cat 10 as event ended when title matches', () => {
+    feedAlerts(service, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    feedAlerts(service, [makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
   it('should poll and process alerts from client', async () => {
     const alerts = [makeAlert(OrefCategory.Rockets, ['תל אביב'])];
     const mockClient = createMockClient(alerts);
@@ -172,7 +202,6 @@ describe('AlertService', () => {
     pollingService.registerAccessory(accessory);
 
     pollingService.start();
-    // Wait for the first poll to complete
     await new Promise((r) => setTimeout(r, 50));
     pollingService.stop();
 
@@ -192,7 +221,7 @@ describe('AlertService', () => {
     pollingService.stop();
 
     assert.strictEqual(log.error.mock.calls.length >= 1, true);
-    assert.strictEqual(accessory.lastState, null); // no state broadcast on error
+    assert.strictEqual(accessory.lastState, null);
   });
 });
 
@@ -206,7 +235,7 @@ describe('getCategoryName', () => {
     assert.strictEqual(getCategoryName(OrefCategory.UAVIntrusion), 'uav');
     assert.strictEqual(getCategoryName(OrefCategory.HazardousMaterials), 'hazmat');
     assert.strictEqual(getCategoryName(OrefCategory.Warning), 'warning');
-    assert.strictEqual(getCategoryName(OrefCategory.EventEnded), 'event_ended');
+    assert.strictEqual(getCategoryName(OrefCategory.HeadsUpNotice), 'headsup');
     assert.strictEqual(getCategoryName(OrefCategory.TerroristInfiltration), 'terror');
   });
 
