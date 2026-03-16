@@ -39,7 +39,11 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     const selectedKeys: string[] = !_.isEmpty(config.categories) ? config.categories : ALL_CATEGORY_KEYS;
     const allowedCategories = new Set(_.flatMap(selectedKeys, (key) => CATEGORY_MAP[key] || []));
 
-    this.alertService = new AlertService(this.log, new OrefClient(), cities, allowedCategories, pollingInterval, alertTimeout);
+    const prefixMatching = _.get(config, 'prefix_matching', false);
+    this.alertService = new AlertService(
+      this.log, new OrefClient(), cities, allowedCategories,
+      pollingInterval, alertTimeout, prefixMatching,
+    );
 
     this.log.easyDebug(`Finished initializing platform: ${PLATFORM_NAME}`);
     this.log.info(`Monitoring ${cities.length} cities, ${allowedCategories.size} category IDs enabled`);

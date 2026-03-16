@@ -8,7 +8,7 @@
     "properties": {
       "cities": {
         "title": "Cities (separate by comma, written in Hebrew)",
-        "description": "City names must match Pikud HaOref naming exactly (in Hebrew)",
+        "description": "City names must match Pikud HaOref naming exactly (in Hebrew). With prefix matching enabled, 'תל אביב' will match all Tel Aviv sub-areas.",
         "type": "string",
         "required": true,
         "default": "אזור_פיקוד_העורף_בעברית"
@@ -52,23 +52,42 @@
         "default": 10,
         "minimum": 1,
         "maximum": 60
-      },
-      "polling_interval": {
-        "title": "Polling interval in milliseconds",
-        "description": "How often to check for new alerts. Default is 1000ms (1 second). Lower values are faster but use more bandwidth.",
-        "type": "number",
-        "required": false,
-        "default": 1000,
-        "minimum": 500,
-        "maximum": 5000
-      },
-      "debug": {
-        "title": "Enable Debug Logs",
-        "description": "When checked, the plugin will produce extra logs for debugging purposes",
-        "type": "boolean",
-        "default": false,
-        "required": false
       }
     }
-  }
+  },
+  "layout": [
+    "cities",
+    "categories",
+    "alert_timeout",
+    {
+      "type": "fieldset",
+      "title": "Advanced",
+      "expandable": true,
+      "items": [
+        {
+          "key": "prefix_matching",
+          "title": "Enable Prefix Matching",
+          "description": "When enabled, 'תל אביב' will match all sub-areas like 'תל אביב - דרום העיר ויפו'. Useful for monitoring entire metro areas with one entry.",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "key": "polling_interval",
+          "title": "Polling Interval (ms)",
+          "description": "How often to check for new alerts. Default is 1000ms (1 second). Lower values are faster but use more bandwidth.",
+          "type": "number",
+          "default": 1000,
+          "minimum": 500,
+          "maximum": 5000
+        },
+        {
+          "key": "debug",
+          "title": "Enable Debug Logs",
+          "description": "When checked, the plugin will produce extra logs for debugging purposes.",
+          "type": "boolean",
+          "default": false
+        }
+      ]
+    }
+  ]
 }

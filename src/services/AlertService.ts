@@ -23,6 +23,7 @@ export class AlertService {
     private readonly allowedCategories: Set<number>,
     private readonly pollingInterval: number,
     alertTimeoutMinutes: number,
+    private readonly prefixMatching: boolean = false,
   ) {
     this.citySet = new Set(cities);
     this.maxActiveAgeMs = alertTimeoutMinutes * 60 * 1000;
@@ -51,12 +52,14 @@ export class AlertService {
       return;
     }
 
+    const start = Date.now();
     this.client.fetchAlerts()
       .then((alerts) => {
+        this.log.easyDebug(() => `Fetch completed in ${Date.now() - start}ms`);
         this.handleAlerts(alerts);
       })
       .catch((err) => {
-        this.log.error(`Failed to fetch alerts: ${err}`);
+        this.log.error(`Failed to fetch alerts (${Date.now() - start}ms): ${err}`);
       })
       .finally(() => {
         if (this.polling) {
@@ -92,7 +95,7 @@ export class AlertService {
     // Add newly alerted cities
     _(relevantAlerts)
       .flatMap((alert) => _.map(alert.data, (city) => ({ city, title: alert.title })))
-      .filter(({ city }) => this.citySet.has(city) && !this.activeCities.has(city))
+      .filter(({ city }) => this.matchesCity(city) && !this.activeCities.has(city))
       .forEach(({ city, title }) => {
         this.activeCities.set(city, Date.now());
         this.log.info(`ALERT: ${title} - ${city}`);
@@ -100,6 +103,18 @@ export class AlertService {
 
     this.expireStaleAlerts();
     this.broadcastState();
+  }
+
+  private matchesCity(alertCity: string): boolean {
+    if (this.citySet.has(alertCity)) {
+      return true;
+    }
+    if (!this.prefixMatching) {
+      return false;
+    }
+    return _.some([...this.citySet], (configured) =>
+      alertCity.startsWith(configured) || configured.startsWith(alertCity),
+    );
   }
 
   private expireStaleAlerts(): void {
