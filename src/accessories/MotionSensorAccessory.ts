@@ -9,6 +9,11 @@ export class MotionSensorAccessory {
     private readonly platform: RedAlertPlatform,
     accessory: PlatformAccessory,
   ) {
+    accessory.getService(this.platform.Service.AccessoryInformation)!
+      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'toharush')
+      .setCharacteristic(this.platform.Characteristic.Model, 'Red Alert Motion Sensor')
+      .setCharacteristic(this.platform.Characteristic.SerialNumber, 'RA-MOTION-001');
+
     this.service =
       accessory.getService(this.platform.Service.MotionSensor) ||
       accessory.addService(this.platform.Service.MotionSensor, 'Red Alert', 'alerts');
