@@ -1,3 +1,4 @@
+import _ from 'lodash';
 import { OrefCategory, OrefRealtimeAlert, AlertState } from '../types';
 import { DebugLogger } from '../utils/debugLogger';
 import { AlertClient } from '../clients/orefClient';
@@ -67,19 +68,19 @@ export class AlertService {
   // --- Alert processing ---
 
   private handleAlerts(alerts: OrefRealtimeAlert[]): void {
-    if (alerts.length > 0) {
+    if (!_.isEmpty(alerts)) {
       this.log.easyDebug(() => `Raw alerts: ${JSON.stringify(alerts)}`);
     }
 
-    const eventEnded = alerts.filter((a) => a.cat === String(OrefCategory.EventEnded));
-    const relevant = alerts.filter((a) => {
-      const cat = parseInt(a.cat, 10);
-      return !isNaN(cat) && cat !== OrefCategory.EventEnded && this.allowedCategories.has(cat);
+    const endedAlerts = _.filter(alerts, (alert) => alert.cat === String(OrefCategory.EventEnded));
+    const relevantAlerts = _.filter(alerts, (alert) => {
+      const categoryId = _.toInteger(alert.cat);
+      return categoryId > 0 && categoryId !== OrefCategory.EventEnded && this.allowedCategories.has(categoryId);
     });
 
     // Clear cities from ended events
-    eventEnded
-      .flatMap((a) => a.data)
+    _(endedAlerts)
+      .flatMap((alert) => alert.data)
       .filter((city) => this.activeCities.has(city))
       .forEach((city) => {
         this.activeCities.delete(city);
@@ -87,8 +88,8 @@ export class AlertService {
       });
 
     // Add newly alerted cities
-    relevant
-      .flatMap((a) => a.data.map((city) => ({ city, title: a.title })))
+    _(relevantAlerts)
+      .flatMap((alert) => _.map(alert.data, (city) => ({ city, title: alert.title })))
       .filter(({ city }) => this.citySet.has(city) && !this.activeCities.has(city))
       .forEach(({ city, title }) => {
         this.activeCities.set(city, Date.now());
