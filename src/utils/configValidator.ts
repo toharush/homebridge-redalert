@@ -1,5 +1,11 @@
 import { Logger, PlatformConfig } from 'homebridge';
-import { ValidatedConfig } from '../types';
+
+export interface ValidatedConfig extends PlatformConfig {
+  cities: string;
+  polling_interval?: number;
+  debug?: boolean;
+  categories?: string[];
+}
 
 export function validateConfig(config: PlatformConfig, log: Logger): ValidatedConfig | null {
   if (!config.cities) {

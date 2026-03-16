@@ -1,42 +1,4 @@
-import _ from 'lodash';
-import { Characteristic, PlatformConfig } from 'homebridge';
-
-export interface ValidatedConfig extends PlatformConfig {
-  cities: string;
-  polling_interval?: number;
-  debug?: boolean;
-  categories?: string[];
-}
-
-export type CharacteristicType = typeof Characteristic;
-
-export interface CachedService {
-  getMotionDetected: () => boolean | null;
-  setMotionDetected: (on: boolean) => void;
-}
-
-// Real-time alert from alerts.json
-export interface OrefRealtimeAlert {
-  id: string;
-  cat: string;
-  title: string;
-  data: string[];
-  desc: string;
-}
-
-// Real-time alert category IDs (matrix_id from alertCategories.json)
-export enum OrefCategory {
-  Rockets = 1,
-  NonConventional = 2,
-  Earthquake = 3,
-  CBRNE = 4,
-  Tsunami = 5,
-  UAVIntrusion = 6,
-  HazardousMaterials = 7,
-  Warning = 8,
-  EventEnded = 10,
-  TerroristInfiltration = 13,
-}
+import { OrefCategory } from './oref';
 
 const CATEGORY_NAMES = new Map<number, string>([
   [OrefCategory.Rockets, 'rockets'],
@@ -55,7 +17,6 @@ export function getCategoryName(category: number): string {
   return CATEGORY_NAMES.get(category) || 'unknown';
 }
 
-// Maps config checkbox values to OrefCategory IDs (matrix_id)
 export const CATEGORY_MAP: Record<string, number[]> = {
   rockets: [OrefCategory.Rockets],
   uav: [OrefCategory.UAVIntrusion],
@@ -68,4 +29,4 @@ export const CATEGORY_MAP: Record<string, number[]> = {
   hazmat: [OrefCategory.HazardousMaterials],
 };
 
-export const ALL_CATEGORY_KEYS = _.keys(CATEGORY_MAP);
+export const ALL_CATEGORY_KEYS = Object.keys(CATEGORY_MAP);
