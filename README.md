@@ -63,6 +63,10 @@ Configure via the Homebridge UI or manually in `config.json`:
 | `tsunami` | Tsunami (צונאמי) |
 | `hazmat` | Hazardous Materials (חומרים מסוכנים) |
 
+## Documentation
+
+For detailed docs, architecture, automation examples, and troubleshooting, see the [Wiki](https://github.com/toharush/homebridge-redalert/wiki).
+
 ## How It Works
 
 - The plugin creates a single **motion sensor** in HomeKit.
