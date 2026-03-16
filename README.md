@@ -34,6 +34,7 @@ Configure via the Homebridge UI or manually in `config.json`:
   "cities": "תל אביב, חיפה",
   "categories": ["rockets", "uav", "earthquake", "terror"],
   "alert_timeout": 10,
+  "prefix_matching": false,
   "polling_interval": 1000,
   "debug": false
 }
@@ -43,9 +44,15 @@ Configure via the Homebridge UI or manually in `config.json`:
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
-| `cities` | Yes | — | City names in Hebrew, comma-separated. Must match Pikud HaOref naming exactly. |
+| `cities` | Yes | — | City names in Hebrew, comma-separated. Must match Pikud HaOref naming exactly (or use prefix matching). |
 | `categories` | No | All | Alert types to monitor. If empty, all categories are enabled. |
 | `alert_timeout` | No | 10 | Safety fallback: auto-clear alerts after this many minutes if "Event Ended" is never received (1–60). |
+
+### Advanced Options
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `prefix_matching` | No | false | When enabled, city names match by prefix (e.g. "תל אביב" matches all Tel Aviv sub-areas). |
 | `polling_interval` | No | 1000 | How often to poll the API in milliseconds (500–5000). |
 | `debug` | No | false | Enable extra debug logging. |
 
