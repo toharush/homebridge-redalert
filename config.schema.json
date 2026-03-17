@@ -52,11 +52,11 @@
       },
       "alert_timeout": {
         "title": "Alert Timeout (ms)",
-        "description": "Safety fallback: if 'Event Ended' is never received, the alert will auto-clear after this time. Resets when a new alert arrives. Default is 30000ms (30 seconds).",
+        "description": "Safety fallback: if 'Event Ended' is never received, the alert will auto-clear after this time. Resets when a new alert arrives. Default is 30 minutes.",
         "type": "number",
-        "default": 30000,
-        "minimum": 5000,
-        "maximum": 600000
+        "default": 1800000,
+        "minimum": 600000,
+        "maximum": 3600000
       },
       "polling_interval": {
         "title": "Polling Interval (ms)",
@@ -65,6 +65,14 @@
         "default": 1000,
         "minimum": 500,
         "maximum": 5000
+      },
+      "request_timeout": {
+        "title": "Request Timeout (ms)",
+        "description": "How long to wait for the OREF API to respond before aborting the request. Increase if you have a slow network.",
+        "type": "number",
+        "default": 3000,
+        "minimum": 1000,
+        "maximum": 10000
       },
       "debug": {
         "title": "Enable Debug Logs",
@@ -85,6 +93,7 @@
         "prefix_matching",
         "alert_timeout",
         "polling_interval",
+        "request_timeout",
         "debug"
       ]
     }

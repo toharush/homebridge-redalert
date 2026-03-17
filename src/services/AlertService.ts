@@ -61,7 +61,10 @@ export class AlertService {
         }
         this.handleAlerts(alerts);
       })
-      .catch((err) => {
+      .catch((err: Error) => {
+        if (err.name === 'AbortError') {
+          return;
+        }
         this.log.error(`Failed to fetch alerts (${Date.now() - start}ms): ${err}`);
       })
       .finally(() => {

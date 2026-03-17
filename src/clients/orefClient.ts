@@ -7,10 +7,12 @@ export interface AlertClient {
 }
 
 export class OrefClient implements AlertClient {
+  constructor(private readonly requestTimeout: number) {}
+
   async fetchAlerts(): Promise<OrefRealtimeAlert[]> {
     const res = await fetch(OREF_ALERTS_URL, {
       headers: OREF_HEADERS,
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(this.requestTimeout),
     });
 
     const raw = await res.text();

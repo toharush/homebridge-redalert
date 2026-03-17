@@ -1,5 +1,5 @@
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
-import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_POLLING_INTERVAL, DEFAULT_ALERT_TIMEOUT } from './settings';
+import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_POLLING_INTERVAL, DEFAULT_ALERT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT } from './settings';
 import _ from 'lodash';
 import { CATEGORY_MAP, ALL_CATEGORY_KEYS } from './types';
 import { validateConfig } from './utils/configValidator';
@@ -35,13 +35,14 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     const cities = _(validated.cities).split(',').map(_.trim).compact().value();
     const pollingInterval = _.get(config, 'polling_interval', DEFAULT_POLLING_INTERVAL);
     const alertTimeout = _.get(config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT);
+    const requestTimeout = _.get(config, 'request_timeout', DEFAULT_REQUEST_TIMEOUT);
 
     const selectedKeys: string[] = !_.isEmpty(config.categories) ? config.categories : ALL_CATEGORY_KEYS;
     const allowedCategories = new Set(_.flatMap(selectedKeys, (key) => CATEGORY_MAP[key] || []));
 
     const prefixMatching = _.get(config, 'prefix_matching', false);
     this.alertService = new AlertService(
-      this.log, new OrefClient(), cities, allowedCategories,
+      this.log, new OrefClient(requestTimeout), cities, allowedCategories,
       pollingInterval, alertTimeout, prefixMatching,
     );
 
