@@ -5,12 +5,16 @@
   "headerDisplay": "חשוב מאוד לקרוא את תנאי השימוש!\n\nהתוסף איננו תוסף רשמי של פיקוד העורף או מערכת הבטחון.\n\nהתוסף משתמש ב-API של פיקוד העורף לקבלת התרעות ולכן יתכנו שיבושים.\n\nבכל מקרה יש להמשיך להשתמש באמצעיים הרשמיים של מערכת הבטחון.\n\nDisclaimer:\n\n1. This plugin is not an official Home Front Command product.\n\n2. The plugin uses the Pikud HaOref public API for alerts. There may be delays or disruptions.\n\n3. Always use the official alert systems alongside this plugin.",
   "schema": {
     "type": "object",
+    "required": ["cities"],
     "properties": {
+      "name": {
+        "type": "string",
+        "default": "@toharush/homebridge-redalert"
+      },
       "cities": {
         "title": "Cities (separate by comma, written in Hebrew)",
         "description": "City names must match Pikud HaOref naming exactly (in Hebrew). With prefix matching enabled, 'תל אביב' will match all Tel Aviv sub-areas.",
         "type": "string",
-        "required": true,
         "default": "אזור_פיקוד_העורף_בעברית"
       },
       "categories": {
