@@ -66,7 +66,7 @@ These options are available under the **Advanced** expandable section in the Hom
 | `rockets` | Rockets & Missiles (ירי רקטות וטילים) |
 | `uav` | UAV Intrusion (חדירת כלי טיס) |
 | `nonconventional` | Non-conventional Threat |
-| `warning` | Heads-up Notice (התראה מוקדמת) |
+| `warning` | Heads-up Notice (התרעה מוקדמת) |
 | `earthquake` | Earthquake (רעידת אדמה) |
 | `cbrne` | Chemical/Bio/Nuclear |
 | `terror` | Terrorist Infiltration (חדירת מחבלים) |
