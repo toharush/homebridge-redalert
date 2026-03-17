@@ -9,4 +9,5 @@ export const OREF_HEADERS = {
 };
 
 export const DEFAULT_POLLING_INTERVAL = 1000; // ms
-export const DEFAULT_ALERT_TIMEOUT = 30000; // ms
+export const DEFAULT_ALERT_TIMEOUT = 1800000; // 30 minutes in ms
+export const DEFAULT_REQUEST_TIMEOUT = 3000; // ms

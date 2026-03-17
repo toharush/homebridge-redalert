@@ -33,7 +33,7 @@ Configure via the Homebridge UI or manually in `config.json`:
   "platform": "RedAlert",
   "cities": "תל אביב, חיפה",
   "categories": ["rockets", "uav", "earthquake", "terror"],
-  "alert_timeout": 30000,
+  "alert_timeout": 1800000,
   "prefix_matching": false,
   "polling_interval": 1000,
   "debug": false
@@ -54,8 +54,9 @@ These options are available under the **Advanced** expandable section in the Hom
 | Option | Default | Description |
 |--------|---------|-------------|
 | `prefix_matching` | `false` | When enabled, city names match by prefix (e.g. "תל אביב" matches all Tel Aviv sub-areas). |
-| `alert_timeout` | `30000` | Auto-clear alerts after this time in ms if "Event Ended" is never received. Resets on each new alert (5000–600000). |
+| `alert_timeout` | `1800000` | Auto-clear alerts after this time in ms if "Event Ended" is never received. Resets on each new alert. Default is 30 minutes (600000–3600000). |
 | `polling_interval` | `1000` | How often to poll the API in ms (500–5000). |
+| `request_timeout` | `3000` | How long to wait for the OREF API to respond before aborting the request in ms. Increase if you have a slow network (1000–10000). |
 | `debug` | `false` | Enable extra debug logging. |
 
 ### Available Categories
@@ -82,7 +83,7 @@ For detailed docs, architecture, automation examples, and troubleshooting, see t
 - It polls the Pikud HaOref API every second (configurable).
 - When an alert matches your cities and selected categories, the motion sensor turns **ON**.
 - The sensor stays **ON** until Pikud HaOref sends an "Event Ended" message for your city.
-- If "Event Ended" is never received (API issue), the alert auto-clears after the configured timeout (default: 10 minutes).
+- If "Event Ended" is never received (API issue), the alert auto-clears after the configured timeout (default: 30 minutes).
 - You can create HomeKit automations based on the motion sensor (e.g. flash lights, play a sound, send a notification).
 
 ## License
