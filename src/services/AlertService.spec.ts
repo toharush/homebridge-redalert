@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { OrefCategory, CATEGORY_MAP, getCategoryName, OrefRealtimeAlert, AlertState, EVENT_ENDED_TITLE } from '../types';
 import { AlertClient } from '../clients/orefClient';
 import { AlertService, AlertAccessory } from './AlertService';
+import { DEFAULT_POLLING_INTERVAL, DEFAULT_ALERT_TIMEOUT } from '../settings';
 
 function createMockLogger() {
   return {
@@ -79,7 +80,7 @@ function createService(
   client?: AlertClient,
   prefixMatching?: boolean,
 ): AlertService {
-  return new AlertService(log, client || createMockClient(), cities, categories, 1000, 10, prefixMatching);
+  return new AlertService(log, client || createMockClient(), cities, categories, DEFAULT_POLLING_INTERVAL, DEFAULT_ALERT_TIMEOUT, prefixMatching);
 }
 
 // Feed alerts directly without starting the polling loop
@@ -159,6 +160,23 @@ describe('AlertService', () => {
     feedAlerts(service, [alert]);
     feedAlerts(service, [alert]);
     assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+  });
+
+  it('should reset timeout on repeated alerts for same city', () => {
+    const shortTimeout = new AlertService(log, createMockClient(), cities, allCategoryIds(), 1000, 100);
+    shortTimeout.registerAccessory(accessory);
+
+    feedAlerts(shortTimeout, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Simulate time passing close to timeout, then new alert resets it
+    const activeCities = (shortTimeout as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 90); // 90ms ago, almost expired at 100ms
+
+    feedAlerts(shortTimeout, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    // Timestamp should be reset to now, so it should NOT expire
+    const timestamp = activeCities.get('תל אביב')!;
+    assert.ok(Date.now() - timestamp < 50);
   });
 
   it('should skip alerts with invalid category', () => {

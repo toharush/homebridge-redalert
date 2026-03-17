@@ -33,7 +33,7 @@ Configure via the Homebridge UI or manually in `config.json`:
   "platform": "RedAlert",
   "cities": "תל אביב, חיפה",
   "categories": ["rockets", "uav", "earthquake", "terror"],
-  "alert_timeout": 10,
+  "alert_timeout": 30000,
   "prefix_matching": false,
   "polling_interval": 1000,
   "debug": false
@@ -54,8 +54,8 @@ These options are available under the **Advanced** expandable section in the Hom
 | Option | Default | Description |
 |--------|---------|-------------|
 | `prefix_matching` | `false` | When enabled, city names match by prefix (e.g. "תל אביב" matches all Tel Aviv sub-areas). |
-| `alert_timeout` | `10` | Safety fallback: auto-clear alerts after this many minutes if "Event Ended" is never received (1–60). |
-| `polling_interval` | `1000` | How often to poll the API in milliseconds (500–5000). |
+| `alert_timeout` | `30000` | Auto-clear alerts after this time in ms if "Event Ended" is never received. Resets on each new alert (5000–600000). |
+| `polling_interval` | `1000` | How often to poll the API in ms (500–5000). |
 | `debug` | `false` | Enable extra debug logging. |
 
 ### Available Categories

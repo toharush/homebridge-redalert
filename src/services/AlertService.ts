@@ -22,11 +22,11 @@ export class AlertService {
     cities: string[],
     private readonly allowedCategories: Set<number>,
     private readonly pollingInterval: number,
-    alertTimeoutMinutes: number,
+    private readonly alertTimeoutMs: number,
     private readonly prefixMatching: boolean = false,
   ) {
     this.citySet = new Set(cities);
-    this.maxActiveAgeMs = alertTimeoutMinutes * 60 * 1000;
+    this.maxActiveAgeMs = alertTimeoutMs;
   }
 
   registerAccessory(accessory: AlertAccessory): void {
@@ -95,13 +95,16 @@ export class AlertService {
         this.log.info(`Event ended: ${city}`);
       });
 
-    // Add newly alerted cities
+    // Add newly alerted cities or reset timeout for already active ones
     _(relevantAlerts)
       .flatMap((alert) => _.map(alert.data, (city) => ({ city, title: alert.title })))
-      .filter(({ city }) => this.matchesCity(city) && !this.activeCities.has(city))
+      .filter(({ city }) => this.matchesCity(city))
       .forEach(({ city, title }) => {
+        const isNew = !this.activeCities.has(city);
         this.activeCities.set(city, Date.now());
-        this.log.info(`ALERT: ${title} - ${city}`);
+        if (isNew) {
+          this.log.info(`ALERT: ${title} - ${city}`);
+        }
       });
 
     this.expireStaleAlerts();
@@ -125,7 +128,7 @@ export class AlertService {
     for (const [city, timestamp] of this.activeCities) {
       if (now - timestamp > this.maxActiveAgeMs) {
         this.activeCities.delete(city);
-        this.log.warn(`Alert for ${city} expired after ${this.maxActiveAgeMs / 60000} minutes (safety fallback)`);
+        this.log.warn(`Alert for ${city} expired after ${this.maxActiveAgeMs / 1000}s (safety fallback)`);
       }
     }
   }

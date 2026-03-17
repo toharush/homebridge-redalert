@@ -51,12 +51,12 @@
         "default": false
       },
       "alert_timeout": {
-        "title": "Alert Timeout (minutes)",
-        "description": "Safety fallback: if 'Event Ended' is never received, the alert will auto-clear after this many minutes.",
+        "title": "Alert Timeout (ms)",
+        "description": "Safety fallback: if 'Event Ended' is never received, the alert will auto-clear after this time. Resets when a new alert arrives. Default is 30000ms (30 seconds).",
         "type": "number",
-        "default": 10,
-        "minimum": 1,
-        "maximum": 60
+        "default": 30000,
+        "minimum": 5000,
+        "maximum": 600000
       },
       "polling_interval": {
         "title": "Polling Interval (ms)",
