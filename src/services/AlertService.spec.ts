@@ -246,6 +246,189 @@ describe('AlertService', () => {
     assert.strictEqual(accessory.lastState!.isActive, true);
   });
 
+  // --- Critical safety edge cases ---
+
+  it('should stay active when event ended arrives for DIFFERENT city', () => {
+    feedAlerts(service, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    feedAlerts(service, [makeEventEnded(['חיפה'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    assert.ok(accessory.lastState!.activeCities.has('תל אביב'));
+  });
+
+  it('should handle simultaneous alerts and event ended in same batch', () => {
+    // New alert for חיפה + event ended for תל אביב in same response
+    feedAlerts(service, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    feedAlerts(service, [
+      makeAlert(OrefCategory.Rockets, ['חיפה']),
+      makeEventEnded(['תל אביב']),
+    ]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    assert.ok(!accessory.lastState!.activeCities.has('תל אביב'));
+    assert.ok(accessory.lastState!.activeCities.has('חיפה'));
+  });
+
+  it('should handle multiple different category alerts for same city', () => {
+    feedAlerts(service, [
+      makeAlert(OrefCategory.Rockets, ['תל אביב']),
+      makeAlert(OrefCategory.UAVIntrusion, ['תל אביב']),
+    ]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    // City should appear once even with two categories
+    assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+  });
+
+  it('should stay active after event ended if new alert arrives in same batch', () => {
+    feedAlerts(service, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    // Event ended + immediate new alert in same batch
+    feedAlerts(service, [
+      makeEventEnded(['תל אביב']),
+      makeAlert(OrefCategory.Rockets, ['תל אביב']),
+    ]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+  });
+
+  it('should handle alert with empty data array', () => {
+    const emptyAlert = { id: '1', cat: '1', title: 'test', data: [] as string[], desc: '' };
+    feedAlerts(service, [emptyAlert]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should ignore category 0', () => {
+    const zeroAlert = { id: '1', cat: '0', title: 'test', data: ['תל אביב'], desc: '' };
+    feedAlerts(service, [zeroAlert]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should ignore negative category', () => {
+    const negAlert = { id: '1', cat: '-1', title: 'test', data: ['תל אביב'], desc: '' };
+    feedAlerts(service, [negAlert]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should expire stale alerts after timeout', () => {
+    const shortTimeout = new AlertService(log, createMockClient(), cities, allCategoryIds(), 1000, 50);
+    shortTimeout.registerAccessory(accessory);
+
+    feedAlerts(shortTimeout, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Simulate time past timeout
+    const activeCities = (shortTimeout as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 100);
+
+    feedAlerts(shortTimeout, []);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should NOT expire alerts that are within timeout', () => {
+    const shortTimeout = new AlertService(log, createMockClient(), cities, allCategoryIds(), 1000, 5000);
+    shortTimeout.registerAccessory(accessory);
+
+    feedAlerts(shortTimeout, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    feedAlerts(shortTimeout, []);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+  });
+
+  it('should handle rapid alert-end-alert-end cycles', () => {
+    for (let i = 0; i < 5; i++) {
+      feedAlerts(service, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+      assert.strictEqual(accessory.lastState!.isActive, true, `cycle ${i}: should be active`);
+
+      feedAlerts(service, [makeEventEnded(['תל אביב'])]);
+      assert.strictEqual(accessory.lastState!.isActive, false, `cycle ${i}: should be inactive`);
+    }
+  });
+
+  it('should track multiple cities independently', () => {
+    feedAlerts(service, [makeAlert(OrefCategory.Rockets, ['תל אביב', 'חיפה'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 2);
+
+    feedAlerts(service, [makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+    assert.ok(accessory.lastState!.activeCities.has('חיפה'));
+    assert.ok(!accessory.lastState!.activeCities.has('תל אביב'));
+    assert.strictEqual(accessory.lastState!.isActive, true);
+  });
+
+  it('should not clear active alert when receiving unrelated event ended', () => {
+    feedAlerts(service, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    // Event ended for a city we never got an alert for
+    feedAlerts(service, [makeEventEnded(['באר שבע'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    assert.ok(accessory.lastState!.activeCities.has('תל אביב'));
+  });
+
+  it('should handle all categories firing at once', () => {
+    const allAlerts = [
+      makeAlert(OrefCategory.Rockets, ['תל אביב']),
+      makeAlert(OrefCategory.UAVIntrusion, ['חיפה']),
+      makeAlert(OrefCategory.Earthquake, ['תל אביב']),
+      makeAlert(OrefCategory.TerroristInfiltration, ['חיפה']),
+    ];
+    feedAlerts(service, allAlerts);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 2);
+  });
+
+  it('should not schedule new polls after stop()', async () => {
+    const alerts = [makeAlert(OrefCategory.Rockets, ['תל אביב'])];
+    const mockClient = createMockClient(alerts);
+    const pollingService = createService(log, cities, allCategoryIds(), mockClient);
+    pollingService.registerAccessory(accessory);
+
+    pollingService.start();
+    await new Promise((r) => setTimeout(r, 50));
+    pollingService.stop();
+
+    const callsAtStop = (mockClient.fetchAlerts as any).mock.calls.length;
+    await new Promise((r) => setTimeout(r, 100));
+    const callsAfter = (mockClient.fetchAlerts as any).mock.calls.length;
+
+    // No new fetches should happen after stop
+    assert.strictEqual(callsAtStop, callsAfter);
+  });
+
+  it('should recover after multiple consecutive errors', async () => {
+    let callCount = 0;
+    const flakyClient: AlertClient = {
+      fetchAlerts: mock.fn(() => {
+        callCount++;
+        if (callCount <= 3) {
+          return Promise.reject(new Error('temporary failure'));
+        }
+        return Promise.resolve([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+      }),
+    };
+    const pollingService = new AlertService(log, flakyClient, cities, allCategoryIds(), 10, DEFAULT_ALERT_TIMEOUT);
+    pollingService.registerAccessory(accessory);
+
+    pollingService.start();
+    await new Promise((r) => setTimeout(r, 200));
+    pollingService.stop();
+
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    assert.ok(callCount >= 4);
+  });
+
+  it('should silently handle AbortError from timeout', async () => {
+    const abortClient: AlertClient = {
+      fetchAlerts: mock.fn(() => {
+        const err = new Error('The operation was aborted');
+        err.name = 'AbortError';
+        return Promise.reject(err);
+      }),
+    };
+    const pollingService = createService(log, cities, allCategoryIds(), abortClient);
+    pollingService.registerAccessory(accessory);
+
+    pollingService.start();
+    await new Promise((r) => setTimeout(r, 50));
+    pollingService.stop();
+
+    // AbortError should NOT be logged as an error
+    assert.strictEqual(log.error.mock.calls.length, 0);
+  });
+
   it('should poll and process alerts from client', async () => {
     const alerts = [makeAlert(OrefCategory.Rockets, ['תל אביב'])];
     const mockClient = createMockClient(alerts);
