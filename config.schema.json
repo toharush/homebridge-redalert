@@ -13,13 +13,16 @@
       },
       "cities": {
         "title": "Cities (separate by comma, written in Hebrew)",
-        "description": "City names must match Pikud HaOref naming exactly (in Hebrew). With prefix matching enabled, 'תל אביב' will match all Tel Aviv sub-areas.",
+        "description": "City names must match Pikud HaOref naming exactly (in Hebrew). With prefix matching enabled, 'תל אביב' will match all Tel Aviv sub-areas. Used when no sensors are configured.",
         "type": "string",
-        "default": "אזור_פיקוד_העורף_בעברית"
+        "default": "אזור_פיקוד_העורף_בעברית",
+        "condition": {
+          "functionBody": "return !model.sensors || model.sensors.length === 0;"
+        }
       },
       "categories": {
         "title": "Alert Categories",
-        "description": "Select which alert types to be notified about. If none selected, all categories are enabled.",
+        "description": "Select which alert types to be notified about. If none selected, all categories are enabled. Used when no sensors are configured.",
         "type": "array",
         "uniqueItems": true,
         "items": {
@@ -46,13 +49,84 @@
             "tsunami": "Tsunami (צונאמי)",
             "hazmat": "Hazardous Materials (חומרים מסוכנים)"
           }
+        },
+        "condition": {
+          "functionBody": "return !model.sensors || model.sensors.length === 0;"
         }
       },
       "prefix_matching": {
         "title": "Enable Prefix Matching",
-        "description": "When enabled, 'תל אביב' will match all sub-areas like 'תל אביב - דרום העיר ויפו'. Useful for monitoring entire metro areas with one entry.",
+        "description": "When enabled, 'תל אביב' will match all sub-areas like 'תל אביב - דרום העיר ויפו'. Used when no sensors are configured.",
         "type": "boolean",
-        "default": false
+        "default": false,
+        "condition": {
+          "functionBody": "return !model.sensors || model.sensors.length === 0;"
+        }
+      },
+      "sensors": {
+        "title": "Sensors",
+        "description": "Configure multiple sensors, each with different cities, categories, and settings. When sensors are configured, the top-level cities/categories/prefix_matching fields are ignored.",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["name", "cities"],
+          "properties": {
+            "name": {
+              "title": "Sensor Name",
+              "description": "A unique name for this sensor (appears in HomeKit).",
+              "type": "string"
+            },
+            "cities": {
+              "title": "Cities (separate by comma, written in Hebrew)",
+              "description": "City names must match Pikud HaOref naming exactly (in Hebrew).",
+              "type": "string"
+            },
+            "categories": {
+              "title": "Alert Categories",
+              "description": "Select which alert types to monitor. If none selected, all categories are enabled.",
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "rockets",
+                  "uav",
+                  "nonconventional",
+                  "warning",
+                  "earthquake",
+                  "cbrne",
+                  "terror",
+                  "tsunami",
+                  "hazmat"
+                ],
+                "titleMap": {
+                  "rockets": "Rockets & Missiles (ירי רקטות וטילים)",
+                  "uav": "UAV Intrusion (חדירת כלי טיס)",
+                  "nonconventional": "Non-conventional Threat",
+                  "warning": "Heads-up Notice (התרעה מוקדמת)",
+                  "earthquake": "Earthquake (רעידת אדמה)",
+                  "cbrne": "Chemical/Bio/Nuclear (איום כימי/ביולוגי/גרעיני)",
+                  "terror": "Terrorist Infiltration (חדירת מחבלים)",
+                  "tsunami": "Tsunami (צונאמי)",
+                  "hazmat": "Hazardous Materials (חומרים מסוכנים)"
+                }
+              }
+            },
+            "prefix_matching": {
+              "title": "Enable Prefix Matching",
+              "description": "When enabled, city names match by prefix.",
+              "type": "boolean",
+              "default": false
+            },
+            "alert_timeout": {
+              "title": "Alert Timeout (ms)",
+              "description": "Override the global alert timeout for this sensor.",
+              "type": "number",
+              "minimum": 600000,
+              "maximum": 3600000
+            }
+          }
+        }
       },
       "alert_timeout": {
         "title": "Alert Timeout (ms)",
@@ -89,12 +163,26 @@
   "layout": [
     "cities",
     "categories",
+    "prefix_matching",
+    {
+      "key": "sensors",
+      "type": "array",
+      "title": "Sensors",
+      "description": "Add multiple sensors with different cities and alert types. When sensors are added, the top-level cities/categories fields are hidden.",
+      "buttonText": "Add Sensor",
+      "items": [
+        "sensors[].name",
+        "sensors[].cities",
+        "sensors[].categories",
+        "sensors[].prefix_matching",
+        "sensors[].alert_timeout"
+      ]
+    },
     {
       "type": "fieldset",
       "title": "Advanced",
       "expandable": true,
       "items": [
-        "prefix_matching",
         "alert_timeout",
         "polling_interval",
         "request_timeout",
