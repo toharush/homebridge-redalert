@@ -1,6 +1,6 @@
 # homebridge-redalert
 
-Homebridge plugin for Israeli Red Alert (Pikud HaOref) notifications via HomeKit motion sensor.
+Homebridge plugin for Israeli Red Alert (Pikud HaOref) notifications via HomeKit motion sensors.
 
 The plugin polls the official Pikud HaOref API directly — no Telegram, no middleman, no authentication required.
 
@@ -26,34 +26,55 @@ npm install -g @toharush/homebridge-redalert
 
 ## Configuration
 
-Configure via the Homebridge UI or manually in `config.json`:
+Configure via the Homebridge UI ("Add Sensor" button) or manually in `config.json`:
 
 ```json
 {
   "platform": "RedAlert",
-  "cities": "תל אביב, חיפה",
-  "categories": ["rockets", "uav", "earthquake", "terror"],
+  "sensors": [
+    {
+      "name": "Home",
+      "cities": "תל אביב, חיפה",
+      "categories": ["rockets", "uav", "earthquake", "terror"],
+      "prefix_matching": false
+    }
+  ],
   "alert_timeout": 1800000,
-  "prefix_matching": false,
   "polling_interval": 1000,
   "debug": false
 }
 ```
 
-### Options
+### Multi-Sensor Example
+
+Each sensor creates a separate motion sensor in HomeKit with its own cities, categories, and prefix matching:
+
+```json
+{
+  "platform": "RedAlert",
+  "sensors": [
+    { "name": "Home", "cities": "תל אביב", "categories": ["rockets", "uav"] },
+    { "name": "Office", "cities": "חיפה", "prefix_matching": true },
+    { "name": "Parents", "cities": "באר שבע", "categories": ["rockets"] }
+  ]
+}
+```
+
+### Sensor Options
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
+| `name` | Yes | — | Unique sensor name (appears in HomeKit). |
 | `cities` | Yes | — | City names in Hebrew, comma-separated. Must match Pikud HaOref naming exactly (or use prefix matching). |
 | `categories` | No | All | Alert types to monitor. If empty, all categories are enabled. |
+| `prefix_matching` | No | `false` | When enabled, city names match by prefix (e.g. "תל אביב" matches all Tel Aviv sub-areas). |
 
 ### Advanced Options
 
-These options are available under the **Advanced** expandable section in the Homebridge UI.
+These options are global and available under the **Advanced** expandable section in the Homebridge UI.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `prefix_matching` | `false` | When enabled, city names match by prefix (e.g. "תל אביב" matches all Tel Aviv sub-areas). |
 | `alert_timeout` | `1800000` | Auto-clear alerts after this time in ms if "Event Ended" is never received. Resets on each new alert. Default is 30 minutes (600000–3600000). |
 | `polling_interval` | `1000` | How often to poll the API in ms (500–5000). |
 | `request_timeout` | `3000` | How long to wait for the OREF API to respond before aborting the request in ms. Increase if you have a slow network (1000–10000). |
@@ -79,12 +100,13 @@ For detailed docs, architecture, automation examples, and troubleshooting, see t
 
 ## How It Works
 
-- The plugin creates a single **motion sensor** in HomeKit.
-- It polls the Pikud HaOref API every second (configurable).
-- When an alert matches your cities and selected categories, the motion sensor turns **ON**.
+- The plugin creates one **motion sensor** per configured sensor in HomeKit.
+- A single poller fetches the Pikud HaOref API every second (configurable) — adding sensors does not add API calls.
+- Each sensor independently filters alerts by its own cities and categories.
+- When an alert matches, the sensor turns **ON**.
 - The sensor stays **ON** until Pikud HaOref sends an "Event Ended" message for your city.
 - If "Event Ended" is never received (API issue), the alert auto-clears after the configured timeout (default: 30 minutes).
-- You can create HomeKit automations based on the motion sensor (e.g. flash lights, play a sound, send a notification).
+- You can create HomeKit automations based on each motion sensor (e.g. flash lights, play a sound, send a notification).
 
 ## License
 
