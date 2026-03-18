@@ -5,68 +5,17 @@
   "headerDisplay": "חשוב מאוד לקרוא את תנאי השימוש!\n\nהתוסף איננו תוסף רשמי של פיקוד העורף או מערכת הבטחון.\n\nהתוסף משתמש ב-API של פיקוד העורף לקבלת התרעות ולכן יתכנו שיבושים.\n\nבכל מקרה יש להמשיך להשתמש באמצעיים הרשמיים של מערכת הבטחון.\n\nDisclaimer:\n\n1. This plugin is not an official Home Front Command product.\n\n2. The plugin uses the Pikud HaOref public API for alerts. There may be delays or disruptions.\n\n3. Always use the official alert systems alongside this plugin.",
   "schema": {
     "type": "object",
-    "required": ["cities"],
+    "required": ["sensors"],
     "properties": {
       "name": {
         "type": "string",
         "default": "@toharush/homebridge-redalert"
       },
-      "cities": {
-        "title": "Cities (separate by comma, written in Hebrew)",
-        "description": "City names must match Pikud HaOref naming exactly (in Hebrew). With prefix matching enabled, 'תל אביב' will match all Tel Aviv sub-areas. Used when no sensors are configured.",
-        "type": "string",
-        "default": "אזור_פיקוד_העורף_בעברית",
-        "condition": {
-          "functionBody": "return !model.sensors || model.sensors.length === 0;"
-        }
-      },
-      "categories": {
-        "title": "Alert Categories",
-        "description": "Select which alert types to be notified about. If none selected, all categories are enabled. Used when no sensors are configured.",
-        "type": "array",
-        "uniqueItems": true,
-        "items": {
-          "type": "string",
-          "enum": [
-            "rockets",
-            "uav",
-            "nonconventional",
-            "warning",
-            "earthquake",
-            "cbrne",
-            "terror",
-            "tsunami",
-            "hazmat"
-          ],
-          "titleMap": {
-            "rockets": "Rockets & Missiles (ירי רקטות וטילים)",
-            "uav": "UAV Intrusion (חדירת כלי טיס)",
-            "nonconventional": "Non-conventional Threat",
-            "warning": "Heads-up Notice (התרעה מוקדמת)",
-            "earthquake": "Earthquake (רעידת אדמה)",
-            "cbrne": "Chemical/Bio/Nuclear (איום כימי/ביולוגי/גרעיני)",
-            "terror": "Terrorist Infiltration (חדירת מחבלים)",
-            "tsunami": "Tsunami (צונאמי)",
-            "hazmat": "Hazardous Materials (חומרים מסוכנים)"
-          }
-        },
-        "condition": {
-          "functionBody": "return !model.sensors || model.sensors.length === 0;"
-        }
-      },
-      "prefix_matching": {
-        "title": "Enable Prefix Matching",
-        "description": "When enabled, 'תל אביב' will match all sub-areas like 'תל אביב - דרום העיר ויפו'. Used when no sensors are configured.",
-        "type": "boolean",
-        "default": false,
-        "condition": {
-          "functionBody": "return !model.sensors || model.sensors.length === 0;"
-        }
-      },
       "sensors": {
         "title": "Sensors",
-        "description": "Configure multiple sensors, each with different cities, categories, and settings. When sensors are configured, the top-level cities/categories/prefix_matching fields are ignored.",
+        "description": "Configure one or more sensors, each with different cities, categories, and settings.",
         "type": "array",
+        "minItems": 1,
         "items": {
           "type": "object",
           "required": ["name", "cities"],
@@ -154,14 +103,10 @@
     }
   },
   "layout": [
-    "cities",
-    "categories",
-    "prefix_matching",
     {
       "key": "sensors",
       "type": "array",
       "title": "Sensors",
-      "description": "Add multiple sensors with different cities and alert types. When sensors are added, the top-level cities/categories fields are hidden.",
       "buttonText": "Add Sensor",
       "items": [
         "sensors[].name",

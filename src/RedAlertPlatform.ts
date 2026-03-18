@@ -49,38 +49,23 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     this.cachedAccessories.set(accessory.UUID, accessory);
   }
 
-  private getSensorConfigs(): SensorConfig[] {
-    if (!_.isEmpty(this.config.sensors)) {
-      return this.config.sensors;
-    }
-    // Backward compatibility: no sensors array → single sensor from top-level config
-    return [{
-      name: 'Red Alert',
-      cities: this.config.cities,
-      categories: this.config.categories,
-      prefix_matching: this.config.prefix_matching,
-      alert_timeout: this.config.alert_timeout,
-    }];
-  }
-
   private discoverDevices() {
-    const sensorConfigs = this.getSensorConfigs();
+    const sensors: SensorConfig[] = this.config.sensors;
     const activeUUIDs = new Set<string>();
     const globalAlertTimeout = _.get(this.config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT);
 
-    for (const sensorConfig of sensorConfigs) {
-      const cities = _(sensorConfig.cities).split(',').map(_.trim).compact().value();
+    for (const sensor of sensors) {
+      const cities = _(sensor.cities).split(',').map(_.trim).compact().value();
       if (_.isEmpty(cities)) {
-        this.log.warn(`Sensor "${sensorConfig.name}" has no cities configured, skipping`);
+        this.log.warn(`Sensor "${sensor.name}" has no cities configured, skipping`);
         continue;
       }
 
-      const selectedKeys = !_.isEmpty(sensorConfig.categories) ? sensorConfig.categories! : ALL_CATEGORY_KEYS;
+      const selectedKeys = !_.isEmpty(sensor.categories) ? sensor.categories! : ALL_CATEGORY_KEYS;
       const allowedCategories = new Set(_.flatMap(selectedKeys, (key) => CATEGORY_MAP[key] || []));
-      const prefixMatching = sensorConfig.prefix_matching ?? false;
-      const alertTimeout = sensorConfig.alert_timeout ?? globalAlertTimeout;
+      const prefixMatching = sensor.prefix_matching ?? false;
 
-      const uuid = this.api.hap.uuid.generate(`${PLATFORM_NAME}-${sensorConfig.name}`);
+      const uuid = this.api.hap.uuid.generate(`${PLATFORM_NAME}-${sensor.name}`);
       activeUUIDs.add(uuid);
 
       const existing = this.cachedAccessories.get(uuid);
@@ -89,19 +74,19 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       if (existing) {
         accessory = existing;
       } else {
-        accessory = new this.api.platformAccessory(sensorConfig.name, uuid);
+        accessory = new this.api.platformAccessory(sensor.name, uuid);
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       }
 
-      const motionAccessory = new MotionSensorAccessory(this, accessory, sensorConfig.name);
+      const motionAccessory = new MotionSensorAccessory(this, accessory, sensor.name);
       const filter = new SensorFilter(
-        sensorConfig.name, this.log, motionAccessory, cities,
-        allowedCategories, alertTimeout, prefixMatching,
+        sensor.name, this.log, motionAccessory, cities,
+        allowedCategories, globalAlertTimeout, prefixMatching,
       );
       this.alertService!.registerListener(filter);
 
       this.log.info(
-        `[${sensorConfig.name}] Monitoring ${cities.length} cities, ${allowedCategories.size} category IDs, prefix=${prefixMatching}`,
+        `[${sensor.name}] Monitoring ${cities.length} cities, ${allowedCategories.size} category IDs, prefix=${prefixMatching}`,
       );
     }
 
