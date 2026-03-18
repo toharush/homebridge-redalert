@@ -1,26 +1,19 @@
 import { Logger, PlatformConfig } from 'homebridge';
+import _ from 'lodash';
+import { SensorConfig } from '../types';
 
 export interface ValidatedConfig extends PlatformConfig {
-  cities: string;
-  polling_interval?: number;
-  debug?: boolean;
-  categories?: string[];
+  sensors: SensorConfig[];
 }
 
 export function validateConfig(config: PlatformConfig, log: Logger): ValidatedConfig | null {
-  if (!config.cities) {
+  if (_.isEmpty(config.sensors)) {
     log.error(
-      'No cities found in configuration file, disabling plugin. '
-      + 'Open plugin settings and add your cities.',
+      'No sensors found in configuration file, disabling plugin. '
+      + 'Open plugin settings and add at least one sensor.',
     );
     return null;
   }
-  if (config.cities === 'אזור_פיקוד_העורף_בעברית') {
-    log.error(
-      'Cities not configured, disabling plugin. '
-      + 'Open plugin settings and configure your cities.',
-    );
-    return null;
-  }
+
   return config as ValidatedConfig;
 }

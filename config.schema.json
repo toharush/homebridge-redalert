@@ -5,54 +5,70 @@
   "headerDisplay": "חשוב מאוד לקרוא את תנאי השימוש!\n\nהתוסף איננו תוסף רשמי של פיקוד העורף או מערכת הבטחון.\n\nהתוסף משתמש ב-API של פיקוד העורף לקבלת התרעות ולכן יתכנו שיבושים.\n\nבכל מקרה יש להמשיך להשתמש באמצעיים הרשמיים של מערכת הבטחון.\n\nDisclaimer:\n\n1. This plugin is not an official Home Front Command product.\n\n2. The plugin uses the Pikud HaOref public API for alerts. There may be delays or disruptions.\n\n3. Always use the official alert systems alongside this plugin.",
   "schema": {
     "type": "object",
-    "required": ["cities"],
+    "required": ["sensors"],
     "properties": {
       "name": {
         "type": "string",
         "default": "@toharush/homebridge-redalert"
       },
-      "cities": {
-        "title": "Cities (separate by comma, written in Hebrew)",
-        "description": "City names must match Pikud HaOref naming exactly (in Hebrew). With prefix matching enabled, 'תל אביב' will match all Tel Aviv sub-areas.",
-        "type": "string",
-        "default": "אזור_פיקוד_העורף_בעברית"
-      },
-      "categories": {
-        "title": "Alert Categories",
-        "description": "Select which alert types to be notified about. If none selected, all categories are enabled.",
+      "sensors": {
+        "title": "Sensors",
+        "description": "Configure one or more sensors, each with different cities, categories, and settings.",
         "type": "array",
-        "uniqueItems": true,
+        "minItems": 1,
         "items": {
-          "type": "string",
-          "enum": [
-            "rockets",
-            "uav",
-            "nonconventional",
-            "warning",
-            "earthquake",
-            "cbrne",
-            "terror",
-            "tsunami",
-            "hazmat"
-          ],
-          "titleMap": {
-            "rockets": "Rockets & Missiles (ירי רקטות וטילים)",
-            "uav": "UAV Intrusion (חדירת כלי טיס)",
-            "nonconventional": "Non-conventional Threat",
-            "warning": "Heads-up Notice (התרעה מוקדמת)",
-            "earthquake": "Earthquake (רעידת אדמה)",
-            "cbrne": "Chemical/Bio/Nuclear (איום כימי/ביולוגי/גרעיני)",
-            "terror": "Terrorist Infiltration (חדירת מחבלים)",
-            "tsunami": "Tsunami (צונאמי)",
-            "hazmat": "Hazardous Materials (חומרים מסוכנים)"
+          "type": "object",
+          "required": ["name", "cities"],
+          "properties": {
+            "name": {
+              "title": "Sensor Name",
+              "description": "A unique name for this sensor (appears in HomeKit).",
+              "type": "string"
+            },
+            "cities": {
+              "title": "Cities (separate by comma, written in Hebrew)",
+              "description": "City names must match Pikud HaOref naming exactly (in Hebrew).",
+              "type": "string"
+            },
+            "categories": {
+              "title": "Alert Categories",
+              "description": "Select which alert types to monitor. If none selected, all categories are enabled.",
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "rockets",
+                  "uav",
+                  "nonconventional",
+                  "warning",
+                  "earthquake",
+                  "cbrne",
+                  "terror",
+                  "tsunami",
+                  "hazmat"
+                ],
+                "titleMap": {
+                  "rockets": "Rockets & Missiles (ירי רקטות וטילים)",
+                  "uav": "UAV Intrusion (חדירת כלי טיס)",
+                  "nonconventional": "Non-conventional Threat",
+                  "warning": "Heads-up Notice (התרעה מוקדמת)",
+                  "earthquake": "Earthquake (רעידת אדמה)",
+                  "cbrne": "Chemical/Bio/Nuclear (איום כימי/ביולוגי/גרעיני)",
+                  "terror": "Terrorist Infiltration (חדירת מחבלים)",
+                  "tsunami": "Tsunami (צונאמי)",
+                  "hazmat": "Hazardous Materials (חומרים מסוכנים)"
+                }
+              }
+            },
+            "prefix_matching": {
+              "title": "Enable Prefix Matching",
+              "description": "When enabled, city names match by prefix.",
+              "type": "boolean",
+              "default": false
+            }
           }
         }
-      },
-      "prefix_matching": {
-        "title": "Enable Prefix Matching",
-        "description": "When enabled, 'תל אביב' will match all sub-areas like 'תל אביב - דרום העיר ויפו'. Useful for monitoring entire metro areas with one entry.",
-        "type": "boolean",
-        "default": false
       },
       "alert_timeout": {
         "title": "Alert Timeout (ms)",
@@ -87,14 +103,23 @@
     }
   },
   "layout": [
-    "cities",
-    "categories",
+    {
+      "key": "sensors",
+      "type": "array",
+      "title": "Sensors",
+      "buttonText": "Add Sensor",
+      "items": [
+        "sensors[].name",
+        "sensors[].cities",
+        "sensors[].categories",
+        "sensors[].prefix_matching"
+      ]
+    },
     {
       "type": "fieldset",
       "title": "Advanced",
       "expandable": true,
       "items": [
-        "prefix_matching",
         "alert_timeout",
         "polling_interval",
         "request_timeout",

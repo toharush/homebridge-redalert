@@ -1,10 +1,11 @@
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
 import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_POLLING_INTERVAL, DEFAULT_ALERT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT } from './settings';
 import _ from 'lodash';
-import { CATEGORY_MAP, ALL_CATEGORY_KEYS } from './types';
+import { CATEGORY_MAP, ALL_CATEGORY_KEYS, SensorConfig } from './types';
 import { validateConfig } from './utils/configValidator';
 import { createDebugLogger, DebugLogger } from './utils/debugLogger';
 import { AlertService } from './services/AlertService';
+import { SensorFilter } from './services/SensorFilter';
 import { OrefClient } from './clients/orefClient';
 import { MotionSensorAccessory } from './accessories/MotionSensorAccessory';
 
@@ -13,7 +14,6 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
   public readonly Characteristic!: typeof Characteristic;
   public readonly log: DebugLogger;
 
-  private readonly accessoryUUID: string;
   private readonly cachedAccessories: Map<string, PlatformAccessory> = new Map();
   private alertService: AlertService | null = null;
 
@@ -25,29 +25,18 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
     this.log = createDebugLogger(logger, _.get(config, 'debug', false));
-    this.accessoryUUID = this.api.hap.uuid.generate(PLATFORM_NAME);
 
     const validated = validateConfig(config, this.log);
     if (!validated) {
       return;
     }
 
-    const cities = _(validated.cities).split(',').map(_.trim).compact().value();
     const pollingInterval = _.get(config, 'polling_interval', DEFAULT_POLLING_INTERVAL);
-    const alertTimeout = _.get(config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT);
     const requestTimeout = _.get(config, 'request_timeout', DEFAULT_REQUEST_TIMEOUT);
 
-    const selectedKeys: string[] = !_.isEmpty(config.categories) ? config.categories : ALL_CATEGORY_KEYS;
-    const allowedCategories = new Set(_.flatMap(selectedKeys, (key) => CATEGORY_MAP[key] || []));
-
-    const prefixMatching = _.get(config, 'prefix_matching', false);
-    this.alertService = new AlertService(
-      this.log, new OrefClient(requestTimeout), cities, allowedCategories,
-      pollingInterval, alertTimeout, prefixMatching,
-    );
+    this.alertService = new AlertService(this.log, new OrefClient(requestTimeout), pollingInterval);
 
     this.log.easyDebug(`Finished initializing platform: ${PLATFORM_NAME}`);
-    this.log.info(`Monitoring ${cities.length} cities, ${allowedCategories.size} category IDs enabled`);
 
     this.api.on('didFinishLaunching', () => {
       this.log.easyDebug('Executed didFinishLaunching callback');
@@ -61,21 +50,49 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
   }
 
   private discoverDevices() {
-    const existing = this.cachedAccessories.get(this.accessoryUUID);
-    let accessory: PlatformAccessory;
+    const sensors: SensorConfig[] = this.config.sensors;
+    const activeUUIDs = new Set<string>();
+    const globalAlertTimeout = _.get(this.config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT);
 
-    if (existing) {
-      accessory = existing;
-    } else {
-      accessory = new this.api.platformAccessory('Red Alert', this.accessoryUUID);
-      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+    for (const sensor of sensors) {
+      const cities = _(sensor.cities).split(',').map(_.trim).compact().value();
+      if (_.isEmpty(cities)) {
+        this.log.warn(`Sensor "${sensor.name}" has no cities configured, skipping`);
+        continue;
+      }
+
+      const selectedKeys = !_.isEmpty(sensor.categories) ? sensor.categories! : ALL_CATEGORY_KEYS;
+      const allowedCategories = new Set(_.flatMap(selectedKeys, (key) => CATEGORY_MAP[key] || []));
+      const prefixMatching = sensor.prefix_matching ?? false;
+
+      const uuid = this.api.hap.uuid.generate(`${PLATFORM_NAME}-${sensor.name}`);
+      activeUUIDs.add(uuid);
+
+      const existing = this.cachedAccessories.get(uuid);
+      let accessory: PlatformAccessory;
+
+      if (existing) {
+        accessory = existing;
+      } else {
+        accessory = new this.api.platformAccessory(sensor.name, uuid);
+        this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+      }
+
+      const motionAccessory = new MotionSensorAccessory(this, accessory, sensor.name);
+      const filter = new SensorFilter(
+        sensor.name, this.log, motionAccessory, cities,
+        allowedCategories, globalAlertTimeout, prefixMatching,
+      );
+      this.alertService!.registerListener(filter);
+
+      this.log.info(
+        `[${sensor.name}] Monitoring ${cities.length} cities, ${allowedCategories.size} category IDs, prefix=${prefixMatching}`,
+      );
     }
 
-    this.alertService!.registerAccessory(new MotionSensorAccessory(this, accessory));
-
-    // Remove stale accessories (e.g. old per-city ones from previous versions)
+    // Remove stale accessories
     for (const [uuid, stale] of this.cachedAccessories) {
-      if (uuid !== this.accessoryUUID) {
+      if (!activeUUIDs.has(uuid)) {
         this.log.info(`Removing stale accessory: ${stale.displayName}`);
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [stale]);
       }
