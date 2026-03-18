@@ -3,5 +3,4 @@ export interface SensorConfig {
   cities: string;
   categories?: string[];
   prefix_matching?: boolean;
-  alert_timeout?: number;
 }

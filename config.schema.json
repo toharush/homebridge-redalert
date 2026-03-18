@@ -117,13 +117,6 @@
               "description": "When enabled, city names match by prefix.",
               "type": "boolean",
               "default": false
-            },
-            "alert_timeout": {
-              "title": "Alert Timeout (ms)",
-              "description": "Override the global alert timeout for this sensor.",
-              "type": "number",
-              "minimum": 600000,
-              "maximum": 3600000
             }
           }
         }
@@ -174,8 +167,7 @@
         "sensors[].name",
         "sensors[].cities",
         "sensors[].categories",
-        "sensors[].prefix_matching",
-        "sensors[].alert_timeout"
+        "sensors[].prefix_matching"
       ]
     },
     {
