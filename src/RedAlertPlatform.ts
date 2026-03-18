@@ -33,15 +33,19 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
 
     const pollingInterval = _.get(config, 'polling_interval', DEFAULT_POLLING_INTERVAL);
     const requestTimeout = _.get(config, 'request_timeout', DEFAULT_REQUEST_TIMEOUT);
-
+    const globalAlertTimeout = _.get(config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT);
     this.alertService = new AlertService(this.log, new OrefClient(requestTimeout), pollingInterval);
 
     this.log.easyDebug(`Finished initializing platform: ${PLATFORM_NAME}`);
 
     this.api.on('didFinishLaunching', () => {
       this.log.easyDebug('Executed didFinishLaunching callback');
-      this.discoverDevices();
+      this.discoverDevices(this.alertService!, validated.sensors, globalAlertTimeout);
     });
+  }
+
+  shutdown() {
+    this.alertService?.stop();
   }
 
   configureAccessory(accessory: PlatformAccessory) {
@@ -49,55 +53,63 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     this.cachedAccessories.set(accessory.UUID, accessory);
   }
 
-  private discoverDevices() {
-    const sensors: SensorConfig[] = this.config.sensors;
+  private discoverDevices(alertService: AlertService, sensors: SensorConfig[], globalAlertTimeout: number) {
     const activeUUIDs = new Set<string>();
-    const globalAlertTimeout = _.get(this.config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT);
 
     for (const sensor of sensors) {
-      const cities = _(sensor.cities).split(',').map(_.trim).compact().value();
+      const cities = this.parseCities(sensor);
       if (_.isEmpty(cities)) {
         this.log.warn(`Sensor "${sensor.name}" has no cities configured, skipping`);
         continue;
       }
 
-      const selectedKeys = !_.isEmpty(sensor.categories) ? sensor.categories! : ALL_CATEGORY_KEYS;
-      const allowedCategories = new Set(_.flatMap(selectedKeys, (key) => CATEGORY_MAP[key] || []));
+      const allowedCategories = this.resolveCategories(sensor);
       const prefixMatching = sensor.prefix_matching ?? false;
+      const accessory = this.resolveAccessory(sensor.name);
+      activeUUIDs.add(accessory.UUID);
 
-      const uuid = this.api.hap.uuid.generate(`${PLATFORM_NAME}-${sensor.name}`);
-      activeUUIDs.add(uuid);
-
-      const existing = this.cachedAccessories.get(uuid);
-      let accessory: PlatformAccessory;
-
-      if (existing) {
-        accessory = existing;
-      } else {
-        accessory = new this.api.platformAccessory(sensor.name, uuid);
-        this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-      }
-
-      const motionAccessory = new MotionSensorAccessory(this, accessory, sensor.name);
+      const sensorAccessory = new MotionSensorAccessory(this.log, sensor.name, this, accessory);
       const filter = new SensorFilter(
-        sensor.name, this.log, motionAccessory, cities,
+        sensor.name, this.log, sensorAccessory, cities,
         allowedCategories, globalAlertTimeout, prefixMatching,
       );
-      this.alertService!.registerListener(filter);
+      alertService.registerListener(filter);
 
       this.log.info(
         `[${sensor.name}] Monitoring ${cities.length} cities, ${allowedCategories.size} category IDs, prefix=${prefixMatching}`,
       );
     }
 
-    // Remove stale accessories
+    this.removeStaleAccessories(activeUUIDs);
+    alertService.start();
+  }
+
+  private parseCities(sensor: SensorConfig): string[] {
+    return _(sensor.cities).split(',').map(_.trim).compact().value();
+  }
+
+  private resolveCategories(sensor: SensorConfig): Set<number> {
+    const keys = sensor.categories?.length ? sensor.categories : ALL_CATEGORY_KEYS;
+    return new Set(_.flatMap(keys, (key) => CATEGORY_MAP[key] || []));
+  }
+
+  private resolveAccessory(name: string): PlatformAccessory {
+    const uuid = this.api.hap.uuid.generate(`${PLATFORM_NAME}-${name}`);
+    const existing = this.cachedAccessories.get(uuid);
+    if (existing) {
+      return existing;
+    }
+    const accessory = new this.api.platformAccessory(name, uuid);
+    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+    return accessory;
+  }
+
+  private removeStaleAccessories(activeUUIDs: Set<string>) {
     for (const [uuid, stale] of this.cachedAccessories) {
       if (!activeUUIDs.has(uuid)) {
         this.log.info(`Removing stale accessory: ${stale.displayName}`);
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [stale]);
       }
     }
-
-    this.alertService!.start();
   }
 }
