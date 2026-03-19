@@ -70,6 +70,14 @@
           }
         }
       },
+      "turnoff_delay": {
+        "title": "Turn-Off Delay (ms)",
+        "description": "Delay turning off the motion sensor after the alert ends. Useful to prevent rapid on/off. Default is 0 (instant), maximum is 1 hour (3600000ms).",
+        "type": "number",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 3600000
+      },
       "alert_timeout": {
         "title": "Alert Timeout (ms)",
         "description": "Safety fallback: if 'Event Ended' is never received, the alert will auto-clear after this time. Resets when a new alert arrives. Default is 30 minutes.",
@@ -120,6 +128,7 @@
       "title": "Advanced",
       "expandable": true,
       "items": [
+        "turnoff_delay",
         "alert_timeout",
         "polling_interval",
         "request_timeout",

@@ -39,6 +39,7 @@ Configure via the Homebridge UI ("Add Sensor" button) or manually in `config.jso
       "prefix_matching": false
     }
   ],
+  "turnoff_delay": 0,
   "alert_timeout": 1800000,
   "polling_interval": 1000,
   "debug": false
@@ -75,6 +76,7 @@ These options are global and available under the **Advanced** expandable section
 
 | Option | Default | Description |
 |--------|---------|-------------|
+| `turnoff_delay` | `0` | Delay in ms before turning off the motion sensor after the alert ends. Useful to prevent rapid on/off or to keep automations running longer. If a new alert arrives during the delay, the timer resets (0–3600000). |
 | `alert_timeout` | `1800000` | Auto-clear alerts after this time in ms if "Event Ended" is never received. Resets on each new alert. Default is 30 minutes (600000–3600000). |
 | `polling_interval` | `1000` | How often to poll the API in ms (500–5000). |
 | `request_timeout` | `3000` | How long to wait for the OREF API to respond before aborting the request in ms. Increase if you have a slow network (1000–10000). |
