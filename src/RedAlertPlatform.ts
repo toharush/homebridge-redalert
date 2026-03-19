@@ -1,5 +1,8 @@
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
-import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_POLLING_INTERVAL, DEFAULT_ALERT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT } from './settings';
+import {
+  PLATFORM_NAME, PLUGIN_NAME, DEFAULT_POLLING_INTERVAL,
+  DEFAULT_ALERT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, DEFAULT_TURNOFF_DELAY,
+} from './settings';
 import _ from 'lodash';
 import { CATEGORY_MAP, ALL_CATEGORY_KEYS, SensorConfig } from './types';
 import { validateConfig } from './utils/configValidator';
@@ -34,13 +37,14 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     const pollingInterval = _.get(config, 'polling_interval', DEFAULT_POLLING_INTERVAL);
     const requestTimeout = _.get(config, 'request_timeout', DEFAULT_REQUEST_TIMEOUT);
     const globalAlertTimeout = _.get(config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT);
+    const turnoffDelay = _.get(config, 'turnoff_delay', DEFAULT_TURNOFF_DELAY);
     this.alertService = new AlertService(this.log, new OrefClient(requestTimeout), pollingInterval);
 
     this.log.easyDebug(`Finished initializing platform: ${PLATFORM_NAME}`);
 
     this.api.on('didFinishLaunching', () => {
       this.log.easyDebug('Executed didFinishLaunching callback');
-      this.discoverDevices(this.alertService!, validated.sensors, globalAlertTimeout);
+      this.discoverDevices(this.alertService!, validated.sensors, globalAlertTimeout, turnoffDelay);
     });
   }
 
@@ -53,7 +57,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     this.cachedAccessories.set(accessory.UUID, accessory);
   }
 
-  private discoverDevices(alertService: AlertService, sensors: SensorConfig[], globalAlertTimeout: number) {
+  private discoverDevices(alertService: AlertService, sensors: SensorConfig[], globalAlertTimeout: number, turnoffDelay: number) {
     const activeUUIDs = new Set<string>();
 
     for (const sensor of sensors) {
@@ -68,7 +72,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       const accessory = this.resolveAccessory(sensor.name);
       activeUUIDs.add(accessory.UUID);
 
-      const sensorAccessory = new MotionSensorAccessory(this.log, sensor.name, this, accessory);
+      const sensorAccessory = new MotionSensorAccessory(this.log, sensor.name, this, accessory, turnoffDelay);
       const filter = new SensorFilter(
         sensor.name, this.log, sensorAccessory, cities,
         allowedCategories, globalAlertTimeout, prefixMatching,
