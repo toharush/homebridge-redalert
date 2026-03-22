@@ -18,10 +18,14 @@
   .advanced-section { display: none; margin-top: 12px; border-top: 1px solid #dee2e6; padding-top: 12px; }
   .advanced-section.show { display: block; }
   .ts-wrapper { width: 100%; }
+  .disclaimer-box { background:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:12px 16px; margin-bottom:16px; font-size:0.85em; line-height:1.5; color:#664d03; }
+  @media (prefers-color-scheme: dark) {
+    .disclaimer-box { background:#332701; border-color:#665200; color:#ffda6a; }
+  }
 </style>
 
 <div id="app">
-  <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:12px 16px; margin-bottom:16px; font-size:0.85em; line-height:1.5;">
+  <div class="disclaimer-box">
     <strong>&#9888; Disclaimer / הבהרה</strong>
     <ul style="margin:8px 0 0; padding-left:20px;">
       <li>This plugin is not an official Home Front Command product.<br>התוסף איננו תוסף רשמי של פיקוד העורף.</li>
