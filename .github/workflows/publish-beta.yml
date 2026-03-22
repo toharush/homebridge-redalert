@@ -1,0 +1,48 @@
+name: Publish Beta
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  ci:
+    if: contains(github.ref_name, '-beta')
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: ci
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org/
+
+      - name: Set version from release tag
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
+
+      - run: npm install
+
+      - name: Publish to npm
+        run: npm publish --access public --tag beta
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Cleanup old beta tags (keep last 3)
+        run: |
+          git fetch --tags --force
+          BETA_TAGS=$(git tag -l 'v*-beta*' --sort=-version:refname)
+          echo "$BETA_TAGS" | tail -n +4 | while read -r tag; do
+            [ -z "$tag" ] && continue
+            echo "Deleting old beta tag: $tag"
+            git push origin --delete "$tag" 2>/dev/null || true
+            git tag -d "$tag" 2>/dev/null || true
+          done

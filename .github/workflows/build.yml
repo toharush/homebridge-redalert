@@ -7,22 +7,12 @@ on:
     branches: [main]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-node-20:
+    uses: ./.github/workflows/ci.yml
+    with:
+      node-version: '20'
 
-    strategy:
-      matrix:
-        node-version: [20, 22]
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ matrix.node-version }}
-
-      - run: npm install
-      - run: npm run lint
-      - run: npm run build
-      - run: npm test
+  build-node-22:
+    uses: ./.github/workflows/ci.yml
+    with:
+      node-version: '22'

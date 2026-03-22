@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        type: string
+        default: '20'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node-version }}
+          registry-url: https://registry.npmjs.org/
+
+      - run: npm install
+      - name: Security audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+
+      - name: Report bundle size
+        run: npm pack --dry-run 2>&1
