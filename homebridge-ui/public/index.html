@@ -70,6 +70,7 @@
   let sensors = [];
   let tomInstances = {};
   let sensorCounter = 0;
+  let initializing = true;
 
   const CATEGORIES = [
     { key: 'rockets', label: 'Rockets & Missiles (ירי רקטות וטילים)' },
@@ -92,7 +93,13 @@
       homebridge.toast.error('Failed to load cities list');
     }
 
-    const config = (await homebridge.getPluginConfig())[0] || {};
+    // Read config from file (not Homebridge's in-memory state) to get the migrated version
+    let config;
+    try {
+      config = (await homebridge.request('/config')) || {};
+    } catch {
+      config = (await homebridge.getPluginConfig())[0] || {};
+    }
     sensors = config.sensors || [];
 
     document.getElementById('turnoff_delay').value = config.turnoff_delay ?? 0;
@@ -106,6 +113,7 @@
     } else {
       sensors.forEach((s, i) => renderSensor(s, i));
     }
+    initializing = false;
     homebridge.hideSpinner();
   }
 
@@ -152,22 +160,31 @@
 
     container.appendChild(card);
 
-    const options = cities.map(c => ({
-      value: c.name,
-      text: c.area ? `${c.name} (${c.area})` : c.name,
-    }));
+    // Add all cities (official + custom) as <option> elements on the <select> before TomSelect init
+    const selectEl = document.getElementById(`cities-${id}`);
+    const knownValues = new Set(cities.map(c => c.name));
+    const allOptions = cities.map(c => ({ value: c.name, label: c.area ? `${c.name} (${c.area})` : c.name }));
+    sensorCities.forEach(city => {
+      if (city && !knownValues.has(city)) {
+        allOptions.push({ value: city, label: city });
+      }
+    });
+    allOptions.forEach(opt => {
+      const el = document.createElement('option');
+      el.value = opt.value;
+      el.textContent = opt.label;
+      if (sensorCities.includes(opt.value)) {
+        el.selected = true;
+      }
+      selectEl.appendChild(el);
+    });
 
     tomInstances[id] = new TomSelect(`#cities-${id}`, {
-      options: options,
-      items: sensorCities,
       create: true,
       createFilter: function(input) { return input.trim().length > 0; },
       maxOptions: 100,
       closeAfterSelect: false,
-      persist: false,
-      valueField: 'value',
-      labelField: 'text',
-      searchField: ['value', 'text'],
+      persist: true,
       render: {
         option_create: function(data, escape) {
           return `<div class="create">Add: <strong>${escape(data.input)}</strong></div>`;
@@ -234,6 +251,7 @@
   }
 
   async function saveConfig() {
+    if (initializing) return;
     const config = collectConfig();
     await homebridge.updatePluginConfig([config]);
   }

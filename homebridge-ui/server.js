@@ -9,6 +9,7 @@ class RedAlertUiServer extends HomebridgePluginUiServer {
     console.log('[RedAlert UI] Server starting, __dirname:', __dirname);
 
     this.onRequest('/cities', this.getCities.bind(this));
+    this.onRequest('/config', this.getConfig.bind(this));
     this.ready();
   }
 
@@ -30,6 +31,19 @@ class RedAlertUiServer extends HomebridgePluginUiServer {
     }
 
     throw new Error('cities.json not found in any expected location');
+  }
+
+  async getConfig() {
+    try {
+      const configPath = this.homebridgeConfigPath;
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const platforms = config.platforms || [];
+      const plugin = platforms.find(p => p.platform === 'RedAlert');
+      return plugin || null;
+    } catch (e) {
+      console.log('[RedAlert UI] Failed to read config from file:', e.message);
+      return null;
+    }
   }
 }
 

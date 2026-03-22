@@ -19,4 +19,6 @@ export enum OrefCategory {
   Warning = 8,
   HeadsUpNotice = 10,
   TerroristInfiltration = 13,
+  /** Synthetic category — OREF sends Event Ended as cat 10, we remap it in OrefClient. */
+  EventEnded = 99,
 }
