@@ -1,6 +1,7 @@
 import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { OrefClient } from './orefClient';
+import { OrefCategory, EVENT_ENDED_TITLE } from '../types';
 
 const ALERT = { id: '1', cat: '1', title: 'ירי רקטות וטילים', data: ['תל אביב'], desc: 'desc' };
 
@@ -79,5 +80,19 @@ describe('OrefClient', () => {
   it('should propagate fetch errors', async () => {
     globalThis.fetch = mock.fn(() => Promise.reject(new Error('network error'))) as any;
     await assert.rejects(() => client.fetchAlerts(), { message: 'network error' });
+  });
+
+  it('should remap Event Ended (cat 10) to EventEnded category', async () => {
+    const eventEnded = { id: '2', cat: '10', title: EVENT_ENDED_TITLE, data: ['תל אביב'], desc: '' };
+    globalThis.fetch = mockFetch(JSON.stringify([eventEnded])) as any;
+    const result = await client.fetchAlerts();
+    assert.strictEqual(result[0].cat, String(OrefCategory.EventEnded));
+  });
+
+  it('should NOT remap HeadsUpNotice (cat 10 with different title)', async () => {
+    const notice = { id: '3', cat: '10', title: 'בדקות הקרובות צפויות להתקבל התרעות באזורך', data: ['תל אביב'], desc: '' };
+    globalThis.fetch = mockFetch(JSON.stringify([notice])) as any;
+    const result = await client.fetchAlerts();
+    assert.strictEqual(result[0].cat, '10');
   });
 });
