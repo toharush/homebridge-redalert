@@ -204,6 +204,34 @@ describe('SensorFilter', () => {
     assert.strictEqual(accessory.lastState!.isActive, false);
   });
 
+  it('should clear sub-area alert when event ended for parent city (prefix matching)', () => {
+    const prefixFilter = createFilter(log, accessory, ['פתח תקווה'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true);
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['פתח תקווה - מזרח'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    feedAlerts(prefixFilter, [makeEventEnded(['פתח תקווה'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should clear parent alert when event ended for sub-area (prefix matching)', () => {
+    const prefixFilter = createFilter(log, accessory, ['פתח תקווה - מזרח'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true);
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['פתח תקווה'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    feedAlerts(prefixFilter, [makeEventEnded(['פתח תקווה - מזרח'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should NOT prefix match event ended when prefix matching is disabled', () => {
+    feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    feedAlerts(filter, [makeEventEnded(['תל אביב - דרום העיר ויפו'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+  });
+
   it('should NOT prefix match when disabled', () => {
     feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['תל אביב - דרום העיר ויפו'])]);
     assert.strictEqual(accessory.lastState!.isActive, false);

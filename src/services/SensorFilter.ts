@@ -39,18 +39,22 @@ export class SensorFilter implements AlertListener {
 
     _(endedAlerts)
       .flatMap((alert) => alert.data)
-      .filter((city) => this.activeCities.has(city))
       .forEach((city) => {
-        this.activeCities.delete(city);
-        this.log.info(`[${this.name}] Event ended: ${city}`);
+        const matched = this.findConfiguredCity(city);
+        if (matched && this.activeCities.delete(matched)) {
+          this.log.info(`[${this.name}] Event ended: ${matched}`);
+        }
       });
 
     _(relevantAlerts)
       .flatMap((alert) => _.map(alert.data, (city) => ({ city, title: alert.title })))
-      .filter(({ city }) => this.matchesCity(city))
       .forEach(({ city, title }) => {
-        const isNew = !this.activeCities.has(city);
-        this.activeCities.set(city, Date.now());
+        const matched = this.findConfiguredCity(city);
+        if (!matched) {
+          return;
+        }
+        const isNew = !this.activeCities.has(matched);
+        this.activeCities.set(matched, Date.now());
         if (isNew) {
           this.log.info(`[${this.name}] ALERT: ${title} - ${city}`);
         }
@@ -60,16 +64,19 @@ export class SensorFilter implements AlertListener {
     this.broadcastState();
   }
 
-  private matchesCity(alertCity: string): boolean {
+  private findConfiguredCity(alertCity: string): string | undefined {
     if (this.citySet.has(alertCity)) {
-      return true;
+      return alertCity;
     }
     if (!this.prefixMatching) {
-      return false;
+      return undefined;
     }
-    return _.some([...this.citySet], (configured) =>
-      alertCity.startsWith(configured) || configured.startsWith(alertCity),
-    );
+    for (const configured of this.citySet) {
+      if (_.startsWith(alertCity, configured) || _.startsWith(configured, alertCity)) {
+        return configured;
+      }
+    }
+    return undefined;
   }
 
   private expireStaleAlerts(): void {

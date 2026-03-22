@@ -21,7 +21,8 @@
   "scripts": {
     "lint": "eslint src/ --max-warnings=20",
     "watch": "npm run build && npm link && nodemon",
-    "build": "rimraf ./dist && tsc",
+    "build": "rimraf ./dist && tsc && npm run copy-data",
+    "copy-data": "mkdir -p dist/data && cp src/data/cities.json dist/data/",
     "test": "tsx --test src/**/*.spec.ts",
     "prepublishOnly": "npm run lint && npm run build",
     "first-publish": "npm publish --access public"
@@ -46,6 +47,7 @@
     "homebridge-plugin"
   ],
   "dependencies": {
+    "@homebridge/plugin-ui-utils": "^1.0.0",
     "lodash": "^4.17.23"
   },
   "devDependencies": {
