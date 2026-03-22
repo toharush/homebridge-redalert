@@ -370,6 +370,551 @@ describe('SensorFilter', () => {
     assert.ok(accessory.lastState!.activeCities.has('תל אביב'));
   });
 
+  it('should release one city at a time when alerts fire in multiple places', () => {
+    const multiFilter = createFilter(log, accessory, ['תל אביב', 'חיפה', 'באר שבע'], allCategoryIds());
+
+    // Alerts in all 3 cities
+    feedAlerts(multiFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב', 'חיפה', 'באר שבע'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 3);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Event ended only for תל אביב
+    feedAlerts(multiFilter, [makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 2);
+    assert.ok(!accessory.lastState!.activeCities.has('תל אביב'));
+    assert.ok(accessory.lastState!.activeCities.has('חיפה'));
+    assert.ok(accessory.lastState!.activeCities.has('באר שבע'));
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Event ended for חיפה
+    feedAlerts(multiFilter, [makeEventEnded(['חיפה'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+    assert.ok(accessory.lastState!.activeCities.has('באר שבע'));
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Event ended for באר שבע — all clear
+    feedAlerts(multiFilter, [makeEventEnded(['באר שבע'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 0);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should handle two sensors - notice sensor and alert sensor independently', () => {
+    const noticeSensor = createMockAccessory();
+    const alertSensor = createMockAccessory();
+    const noticeFilter = createFilter(log, noticeSensor, ['תל אביב'], new Set(CATEGORY_MAP['warning']));
+    const alertFilter = createFilter(log, alertSensor, ['תל אביב'], new Set(CATEGORY_MAP['rockets']));
+
+    // Heads-up notice arrives — only notice sensor triggers
+    const notice = [makeHeadsUpNotice(['תל אביב'])];
+    noticeFilter.handleAlerts(notice);
+    alertFilter.handleAlerts(notice);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+    assert.strictEqual(alertSensor.lastState!.isActive, false);
+
+    // Rocket alert arrives — alert sensor triggers too, notice stays on
+    const rocket = [makeAlert(OrefCategory.Rockets, ['תל אביב'])];
+    noticeFilter.handleAlerts(rocket);
+    alertFilter.handleAlerts(rocket);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+    assert.strictEqual(alertSensor.lastState!.isActive, true);
+
+    // Event ended — both clear
+    const ended = [makeEventEnded(['תל אביב'])];
+    noticeFilter.handleAlerts(ended);
+    alertFilter.handleAlerts(ended);
+    assert.strictEqual(noticeSensor.lastState!.isActive, false);
+    assert.strictEqual(alertSensor.lastState!.isActive, false);
+  });
+
+  it('should release notice sensor without affecting alert sensor', () => {
+    const noticeSensor = createMockAccessory();
+    const alertSensor = createMockAccessory();
+    const noticeFilter = createFilter(log, noticeSensor, ['תל אביב'], new Set(CATEGORY_MAP['warning']));
+    const alertFilter = createFilter(log, alertSensor, ['תל אביב'], new Set(CATEGORY_MAP['rockets']));
+
+    // Both get triggered
+    const batch = [
+      makeHeadsUpNotice(['תל אביב']),
+      makeAlert(OrefCategory.Rockets, ['תל אביב']),
+    ];
+    noticeFilter.handleAlerts(batch);
+    alertFilter.handleAlerts(batch);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+    assert.strictEqual(alertSensor.lastState!.isActive, true);
+
+    // Event ended for תל אביב — both release since it's the same city
+    const ended = [makeEventEnded(['תל אביב'])];
+    noticeFilter.handleAlerts(ended);
+    alertFilter.handleAlerts(ended);
+    assert.strictEqual(noticeSensor.lastState!.isActive, false);
+    assert.strictEqual(alertSensor.lastState!.isActive, false);
+  });
+
+  it('should clear all sub-area alerts when event ended for parent (prefix matching)', () => {
+    const prefixFilter = createFilter(log, accessory, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true);
+
+    // Alerts for two different sub-areas
+    feedAlerts(prefixFilter, [
+      makeAlert(OrefCategory.Rockets, ['תל אביב - מזרח']),
+      makeAlert(OrefCategory.Rockets, ['תל אביב - דרום העיר ויפו']),
+    ]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Event ended for parent "תל אביב" — should clear the configured "תל אביב"
+    feedAlerts(prefixFilter, [makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should handle event ended arriving before alert in same batch', () => {
+    feedAlerts(filter, [
+      makeEventEnded(['תל אביב']),
+      makeAlert(OrefCategory.Rockets, ['תל אביב']),
+    ]);
+    // Event ended processed first but no active alert to clear, then alert activates
+    assert.strictEqual(accessory.lastState!.isActive, true);
+  });
+
+  it('should handle duplicate cities in alert data array', () => {
+    feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['תל אביב', 'תל אביב', 'תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+  });
+
+  it('should handle multiple event ended for same city (idempotent)', () => {
+    feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    feedAlerts(filter, [makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+
+    // Second event ended for same city — should not crash or change state
+    feedAlerts(filter, [makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should not trigger sensor with empty cities config', () => {
+    const emptyFilter = createFilter(log, accessory, [], allCategoryIds());
+    feedAlerts(emptyFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב', 'חיפה', 'באר שבע'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should expire one city while another stays active', () => {
+    const shortFilter = createFilter(log, accessory, ['תל אביב', 'חיפה'], allCategoryIds(), 100);
+
+    feedAlerts(shortFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+
+    // Manually age תל אביב past timeout
+    const activeCities = (shortFilter as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 200);
+
+    // New alert for חיפה — triggers expiry check, תל אביב expires but חיפה stays
+    feedAlerts(shortFilter, [makeAlert(OrefCategory.Rockets, ['חיפה'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    assert.ok(!accessory.lastState!.activeCities.has('תל אביב'));
+    assert.ok(accessory.lastState!.activeCities.has('חיפה'));
+  });
+
+  it('should isolate prefix matching between sensors', () => {
+    const prefixSensor = createMockAccessory();
+    const exactSensor = createMockAccessory();
+    const prefixFilter = createFilter(log, prefixSensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true);
+    const exactFilter = createFilter(log, exactSensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false);
+
+    const subAreaAlert = [makeAlert(OrefCategory.Rockets, ['תל אביב - מזרח'])];
+    prefixFilter.handleAlerts(subAreaAlert);
+    exactFilter.handleAlerts(subAreaAlert);
+
+    // Prefix sensor matches, exact sensor does not
+    assert.strictEqual(prefixSensor.lastState!.isActive, true);
+    assert.strictEqual(exactSensor.lastState!.isActive, false);
+  });
+
+  it('should prefer exact match over prefix match', () => {
+    const prefixFilter = createFilter(
+      log, accessory, ['תל אביב - מזרח', 'תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true,
+    );
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב - מזרח'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    // Should match the exact "תל אביב - מזרח", not the prefix "תל אביב"
+    assert.ok(accessory.lastState!.activeCities.has('תל אביב - מזרח'));
+  });
+
+  it('should not match substring that is not a prefix', () => {
+    const prefixFilter = createFilter(log, accessory, ['אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true);
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    // "אביב" is NOT a prefix of "תל אביב" — should not match
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should match multiple configured prefixes independently', () => {
+    const prefixFilter = createFilter(
+      log, accessory, ['תל אביב', 'באר שבע'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true,
+    );
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב - מזרח', 'באר שבע - דרום'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 2);
+    assert.ok(accessory.lastState!.activeCities.has('תל אביב'));
+    assert.ok(accessory.lastState!.activeCities.has('באר שבע'));
+
+    // Event ended for one parent only
+    feedAlerts(prefixFilter, [makeEventEnded(['תל אביב - מזרח'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+    assert.ok(!accessory.lastState!.activeCities.has('תל אביב'));
+    assert.ok(accessory.lastState!.activeCities.has('באר שבע'));
+  });
+
+  it('should not prefix match when alert city shares no prefix with configured', () => {
+    const prefixFilter = createFilter(log, accessory, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true);
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['תל מונד'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should handle prefix matching with event ended for exact sub-area after parent alert', () => {
+    const prefixFilter = createFilter(log, accessory, ['חיפה'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true);
+
+    // Alert comes for parent
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['חיפה'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Event ended for a sub-area — matches via prefix
+    feedAlerts(prefixFilter, [makeEventEnded(['חיפה - כרמל ועיר תחתית'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should handle prefix matching with multiple sub-area alerts then single parent event ended', () => {
+    const prefixFilter = createFilter(log, accessory, ['באר שבע'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true);
+
+    // Multiple sub-area alerts — all map to the configured "באר שבע"
+    feedAlerts(prefixFilter, [
+      makeAlert(OrefCategory.Rockets, ['באר שבע - צפון']),
+      makeAlert(OrefCategory.Rockets, ['באר שבע - דרום']),
+      makeAlert(OrefCategory.Rockets, ['באר שבע - מזרח']),
+    ]);
+    // All resolve to same configured city
+    assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+    assert.ok(accessory.lastState!.activeCities.has('באר שבע'));
+
+    // Single parent event ended clears it
+    feedAlerts(prefixFilter, [makeEventEnded(['באר שבע'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should not cross-match prefixes between unrelated cities', () => {
+    const prefixFilter = createFilter(
+      log, accessory, ['כפר סבא', 'כפר יונה'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true,
+    );
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['כפר סבא'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+    assert.ok(accessory.lastState!.activeCities.has('כפר סבא'));
+    assert.ok(!accessory.lastState!.activeCities.has('כפר יונה'));
+  });
+
+  it('should handle prefix event ended that does not match any active city', () => {
+    const prefixFilter = createFilter(log, accessory, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true);
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב - מזרח'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Event ended for unrelated city
+    feedAlerts(prefixFilter, [makeEventEnded(['חיפה - כרמל'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    assert.ok(accessory.lastState!.activeCities.has('תל אביב'));
+  });
+
+  it('should re-trigger after prefix event ended and new prefix alert', () => {
+    const prefixFilter = createFilter(log, accessory, ['אשדוד'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true);
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['אשדוד - א,ב,ד,ה'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    feedAlerts(prefixFilter, [makeEventEnded(['אשדוד'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+
+    // New alert for different sub-area
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['אשדוד - ג,ו,ז'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+  });
+
+  it('should clear each sub-area individually with matching event ended (prefix)', () => {
+    // User configured specific sub-areas, not the parent
+    const prefixFilter = createFilter(
+      log, accessory, ['תל אביב - מזרח', 'תל אביב - דרום העיר ויפו'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true,
+    );
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב - מזרח'])]);
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב - דרום העיר ויפו'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 2);
+
+    // Event ended per sub-area clears each independently
+    feedAlerts(prefixFilter, [makeEventEnded(['תל אביב - מזרח'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+    assert.ok(accessory.lastState!.activeCities.has('תל אביב - דרום העיר ויפו'));
+
+    feedAlerts(prefixFilter, [makeEventEnded(['תל אביב - דרום העיר ויפו'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should clear alerts via event ended even when sensor only monitors rockets', () => {
+    const rocketsOnly = createFilter(log, accessory, ['תל אביב'], new Set(CATEGORY_MAP['rockets']));
+
+    feedAlerts(rocketsOnly, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Event ended is cat 10 (HeadsUpNotice) — sensor only monitors rockets but should still clear
+    feedAlerts(rocketsOnly, [makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should handle batch event ended for multiple cities at once', () => {
+    feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['תל אביב', 'חיפה'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 2);
+
+    // Single event ended message with both cities
+    feedAlerts(filter, [makeEventEnded(['תל אביב', 'חיפה'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 0);
+  });
+
+  it('should handle alert with mix of matching and non-matching cities', () => {
+    feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['באר שבע', 'תל אביב', 'אשדוד', 'חיפה', 'נתניה'])]);
+    // Only תל אביב and חיפה are in the config
+    assert.strictEqual(accessory.lastState!.activeCities.size, 2);
+    assert.ok(accessory.lastState!.activeCities.has('תל אביב'));
+    assert.ok(accessory.lastState!.activeCities.has('חיפה'));
+  });
+
+  it('should handle empty string in alert data array', () => {
+    feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['', 'תל אביב', ''])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+    assert.ok(accessory.lastState!.activeCities.has('תל אביב'));
+  });
+
+  it('should handle two sensors on same city triggering and clearing independently', () => {
+    const sensor1 = createMockAccessory();
+    const sensor2 = createMockAccessory();
+    const filter1 = createFilter(log, sensor1, ['תל אביב'], new Set(CATEGORY_MAP['rockets']));
+    const filter2 = createFilter(log, sensor2, ['תל אביב'], new Set(CATEGORY_MAP['rockets']));
+
+    const alert = [makeAlert(OrefCategory.Rockets, ['תל אביב'])];
+    filter1.handleAlerts(alert);
+    filter2.handleAlerts(alert);
+    assert.strictEqual(sensor1.lastState!.isActive, true);
+    assert.strictEqual(sensor2.lastState!.isActive, true);
+
+    // Event ended only sent to filter1
+    filter1.handleAlerts([makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(sensor1.lastState!.isActive, false);
+    assert.strictEqual(sensor2.lastState!.isActive, true); // filter2 never got event ended
+  });
+
+  it('should handle timeout expiry after some cities cleared by event ended', () => {
+    const shortFilter = createFilter(log, accessory, ['תל אביב', 'חיפה'], allCategoryIds(), 100);
+
+    feedAlerts(shortFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב', 'חיפה'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 2);
+
+    // Event ended clears חיפה
+    feedAlerts(shortFilter, [makeEventEnded(['חיפה'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+    assert.ok(accessory.lastState!.activeCities.has('תל אביב'));
+
+    // Age תל אביב past timeout
+    const activeCities = (shortFilter as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 200);
+
+    // Empty poll triggers expiry
+    feedAlerts(shortFilter, []);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should handle alert followed by many empty polls then event ended', () => {
+    feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Simulate many empty polls
+    for (let i = 0; i < 20; i++) {
+      feedAlerts(filter, []);
+    }
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    feedAlerts(filter, [makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should expire alert at exactly the timeout boundary', () => {
+    const shortFilter = createFilter(log, accessory, cities, allCategoryIds(), 100);
+
+    feedAlerts(shortFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Set timestamp to exactly the timeout boundary
+    const activeCities = (shortFilter as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 100);
+
+    feedAlerts(shortFilter, []);
+    // At exactly timeout, should NOT expire (only > timeout expires)
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // One ms past timeout — should expire
+    activeCities.set('תל אביב', Date.now() - 101);
+    feedAlerts(shortFilter, []);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should rescue alert from expiry when new alert arrives at timeout boundary', () => {
+    const shortFilter = createFilter(log, accessory, cities, allCategoryIds(), 100);
+
+    feedAlerts(shortFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Age close to expiry
+    const activeCities = (shortFilter as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 99);
+
+    // New alert resets timestamp before expiry runs
+    feedAlerts(shortFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    assert.ok(Date.now() - activeCities.get('תל אביב')! < 50);
+  });
+
+  it('should handle cat as number instead of string (API inconsistency)', () => {
+    const numericCatAlert = { id: '1', cat: 1 as any, title: 'rockets', data: ['תל אביב'], desc: '' };
+    feedAlerts(filter, [numericCatAlert]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+  });
+
+  it('should handle alert with missing fields gracefully', () => {
+    const partial = { id: '1', cat: '1', title: 'test', data: ['תל אביב'] } as any;
+    feedAlerts(filter, [partial]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+  });
+
+  it('should handle alert with undefined data gracefully', () => {
+    const noData = { id: '1', cat: '1', title: 'test', data: undefined } as any;
+    // Should not crash
+    assert.doesNotThrow(() => feedAlerts(filter, [noData]));
+  });
+
+  it('should handle overlapping prefixes - shorter prefix matches first', () => {
+    const prefixFilter = createFilter(
+      log, accessory, ['כפר', 'כפר סבא'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true,
+    );
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['כפר סבא'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    // "כפר סבא" exact match should take priority over "כפר" prefix
+    assert.ok(accessory.lastState!.activeCities.has('כפר סבא'));
+  });
+
+  it('should handle overlapping prefixes - non-exact falls to shorter prefix', () => {
+    const prefixFilter = createFilter(
+      log, accessory, ['כפר', 'כפר סבא'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true,
+    );
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['כפר יונה'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    // "כפר יונה" is not an exact match for either, but "כפר" is a prefix
+    assert.ok(accessory.lastState!.activeCities.has('כפר'));
+  });
+
+  it('should handle alert storm with 50+ cities', () => {
+    const manyCities = Array.from({ length: 50 }, (_, i) => `עיר-${i}`);
+    const stormFilter = createFilter(log, accessory, manyCities, allCategoryIds());
+
+    feedAlerts(stormFilter, [makeAlert(OrefCategory.Rockets, manyCities)]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 50);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Event ended for all
+    feedAlerts(stormFilter, [makeEventEnded(manyCities)]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should handle two different categories for same city then single event ended clears both', () => {
+    feedAlerts(filter, [
+      makeAlert(OrefCategory.Rockets, ['תל אביב']),
+      makeAlert(OrefCategory.UAVIntrusion, ['תל אביב']),
+    ]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Single event ended clears regardless of how many categories triggered it
+    feedAlerts(filter, [makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should handle event ended in multiple separate batches for different cities', () => {
+    feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['תל אביב', 'חיפה'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 2);
+
+    feedAlerts(filter, [makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    feedAlerts(filter, [makeEventEnded(['חיפה'])]);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 0);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should handle whitespace-only city name in alert data', () => {
+    feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['  ', 'תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    assert.strictEqual(accessory.lastState!.activeCities.size, 1);
+  });
+
+  it('should handle rapid cycle: alert → end → alert → end for same city in separate batches', () => {
+    for (let i = 0; i < 10; i++) {
+      feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+      assert.strictEqual(accessory.lastState!.isActive, true, `cycle ${i}: alert`);
+
+      feedAlerts(filter, [makeEventEnded(['תל אביב'])]);
+      assert.strictEqual(accessory.lastState!.isActive, false, `cycle ${i}: ended`);
+    }
+  });
+
+  it('should survive alert with completely empty object in array', () => {
+    const emptyObj = {} as any;
+    assert.doesNotThrow(() => feedAlerts(filter, [emptyObj]));
+  });
+
+  it('should handle event ended between two alert batches for different cities', () => {
+    // First alert for תל אביב
+    feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Event ended for תל אביב
+    feedAlerts(filter, [makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+
+    // New alert for חיפה — sensor should re-trigger
+    feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['חיפה'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    assert.ok(accessory.lastState!.activeCities.has('חיפה'));
+    assert.ok(!accessory.lastState!.activeCities.has('תל אביב'));
+  });
+
+  it('should not trigger false alarm for empty string city with prefix matching', () => {
+    const prefixFilter = createFilter(log, accessory, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true);
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, [''])]);
+    assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should not clear active alert via empty string event ended with prefix matching', () => {
+    const prefixFilter = createFilter(log, accessory, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true);
+
+    feedAlerts(prefixFilter, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    feedAlerts(prefixFilter, [makeEventEnded([''])]);
+    assert.strictEqual(accessory.lastState!.isActive, true); // should NOT be cleared
+  });
+
   it('should handle all categories firing at once', () => {
     const allAlerts = [
       makeAlert(OrefCategory.Rockets, ['תל אביב']),
@@ -538,6 +1083,54 @@ describe('AlertService polling', () => {
 
     assert.strictEqual(accessory1.lastState!.isActive, true);
     assert.strictEqual(accessory2.lastState!.isActive, false);
+  });
+
+  it('should resume polling after stop and start again', async () => {
+    const alerts = [makeAlert(OrefCategory.Rockets, ['תל אביב'])];
+    const mockClient = createMockClient(alerts);
+    const { service } = createPollingService(mockClient);
+
+    // First start/stop
+    service.start();
+    await new Promise((r) => setTimeout(r, 50));
+    service.stop();
+
+    const callsAfterFirstStop = (mockClient.fetchAlerts as any).mock.calls.length;
+    assert.ok(callsAfterFirstStop >= 1);
+
+    // Reset accessory state
+    accessory.lastState = null;
+
+    // Second start/stop — should resume polling
+    service.start();
+    await new Promise((r) => setTimeout(r, 50));
+    service.stop();
+
+    assert.strictEqual(accessory.lastState!.isActive, true);
+    assert.ok((mockClient.fetchAlerts as any).mock.calls.length > callsAfterFirstStop);
+  });
+
+  it('should handle alternating alerts and empty responses from API', async () => {
+    let callCount = 0;
+    const alternatingClient: AlertClient = {
+      fetchAlerts: mock.fn(() => {
+        callCount++;
+        if (callCount % 2 === 1) {
+          return Promise.resolve([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+        }
+        return Promise.resolve([]);
+      }),
+    };
+    const service = new AlertService(log, alternatingClient, 10);
+    const filter = createFilter(log, accessory, cities, allCategoryIds());
+    service.registerListener(filter);
+
+    service.start();
+    await new Promise((r) => setTimeout(r, 150));
+    service.stop();
+
+    // Alert should remain active because there's no event ended, just empty polls
+    assert.strictEqual(accessory.lastState!.isActive, true);
   });
 });
 
