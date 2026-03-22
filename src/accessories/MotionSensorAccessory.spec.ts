@@ -205,6 +205,72 @@ describe('MotionSensorAccessory', () => {
       assert.strictEqual(log.easyDebug.mock.calls.length >= 1, true);
     });
 
+    it('should handle alert arriving exactly when turnoff delay expires', async () => {
+      const { accessory, motionService, getMotionValue } = createMockPlatformAccessory();
+      const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory, 50);
+
+      sensor.updateAlertState(activeState(['תל אביב']));
+      sensor.updateAlertState(inactiveState());
+
+      // Wait almost until delay expires, then send new alert
+      await new Promise((r) => setTimeout(r, 40));
+      sensor.updateAlertState(activeState(['חיפה']));
+
+      // Wait past the original delay
+      await new Promise((r) => setTimeout(r, 30));
+
+      // Should still be ON — delay was cancelled by new alert
+      assert.strictEqual(getMotionValue(), true);
+      assert.strictEqual(motionService.updateCharacteristic.mock.calls.length, 1); // only initial ON
+    });
+
+    it('should handle event ended then new alert then event ended during turnoff delay', async () => {
+      const { accessory, motionService, getMotionValue } = createMockPlatformAccessory();
+      const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory, 50);
+
+      // Alert ON
+      sensor.updateAlertState(activeState(['תל אביב']));
+      assert.strictEqual(getMotionValue(), true);
+
+      // Event ended — starts turnoff delay
+      sensor.updateAlertState(inactiveState());
+
+      // New alert during delay — cancels turnoff
+      sensor.updateAlertState(activeState(['חיפה']));
+
+      // Second event ended — starts new turnoff delay
+      sensor.updateAlertState(inactiveState());
+
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Should have turned off after second delay
+      assert.strictEqual(getMotionValue(), false);
+      assert.strictEqual(motionService.updateCharacteristic.mock.calls.length, 2); // ON + OFF
+    });
+
+    it('should handle rapid ON/OFF/ON/OFF without waiting for timers', async () => {
+      const { accessory, motionService, getMotionValue } = createMockPlatformAccessory();
+      const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory, 50);
+
+      // Rapid toggles without waiting
+      sensor.updateAlertState(activeState(['תל אביב']));
+      sensor.updateAlertState(inactiveState());
+      sensor.updateAlertState(activeState(['חיפה']));
+      sensor.updateAlertState(inactiveState());
+      sensor.updateAlertState(activeState(['באר שבע']));
+
+      // Should be ON — last state was active
+      assert.strictEqual(getMotionValue(), true);
+
+      // Wait for any pending timers
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Should still be ON — last active cancelled the delay
+      assert.strictEqual(getMotionValue(), true);
+      // ON was called once (initial), delays were cancelled by re-activations
+      assert.strictEqual(motionService.updateCharacteristic.mock.calls.length, 1);
+    });
+
     it('should handle full cycle: on -> delayed off -> on -> delayed off', async () => {
       const { accessory, motionService } = createMockPlatformAccessory();
       const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory, 30);

@@ -65,6 +65,9 @@ export class SensorFilter implements AlertListener {
   }
 
   private findConfiguredCity(alertCity: string): string | undefined {
+    if (!alertCity) {
+      return undefined;
+    }
     if (this.citySet.has(alertCity)) {
       return alertCity;
     }
