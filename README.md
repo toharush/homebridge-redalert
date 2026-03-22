@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/toharush/homebridge-redalert">
-    <img src="branding/plugin-icon.png" alt="Red Alert" width="150">
+    <img src="branding/homebridge-redalert-banner.png" alt="Homebridge + Red Alert" width="400">
   </a>
 </p>
 
@@ -14,6 +14,7 @@
   <a href="https://www.npmjs.com/package/@toharush/homebridge-redalert"><img src="https://img.shields.io/npm/dw/@toharush/homebridge-redalert.svg" alt="npm weekly downloads"></a>
   <a href="https://github.com/toharush/homebridge-redalert/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@toharush/homebridge-redalert.svg" alt="license"></a>
   <br>
+  <a href="https://github.com/homebridge/homebridge/wiki/Verified-Plugins"><img src="https://img.shields.io/badge/homebridge-verified-blueviolet?color=%23491F59&style=flat" alt="verified by homebridge"></a>
   <img src="https://img.shields.io/node/v/@toharush/homebridge-redalert.svg" alt="node version">
   <img src="https://img.shields.io/badge/homebridge-%3E%3D1.6.0-blueviolet.svg" alt="homebridge version">
   <img src="https://img.shields.io/npm/last-update/@toharush/homebridge-redalert.svg" alt="last updated">
