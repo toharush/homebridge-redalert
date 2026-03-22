@@ -11,6 +11,7 @@ import { AlertService } from './services/AlertService';
 import { SensorFilter } from './services/SensorFilter';
 import { OrefClient } from './clients/orefClient';
 import { MotionSensorAccessory } from './accessories/MotionSensorAccessory';
+import { migrateConfig } from './utils/migrationHelper';
 
 export class RedAlertPlatform implements DynamicPlatformPlugin {
   public readonly Service!: typeof Service;
@@ -28,6 +29,8 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
     this.log = createDebugLogger(logger, _.get(config, 'debug', false));
+
+    migrateConfig(api.user.configPath(), this.log);
 
     const validated = validateConfig(config, this.log);
     if (!validated) {
@@ -89,6 +92,9 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
   }
 
   private parseCities(sensor: SensorConfig): string[] {
+    if (_.isArray(sensor.cities)) {
+      return _(sensor.cities).map(_.trim).compact().value();
+    }
     return _(sensor.cities).split(',').map(_.trim).compact().value();
   }
 

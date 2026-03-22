@@ -213,4 +213,82 @@ describe('RedAlertPlatform', () => {
 
     assert.strictEqual(api._registered.length, 2);
   });
+
+  describe('migration: cities format', () => {
+    it('should accept cities as array (new format)', () => {
+      const config = createConfig([
+        { name: 'Home', cities: ['תל אביב - יפו', 'חיפה'] },
+      ]);
+      platform = new RedAlertPlatform(logger, config, api as any);
+      api.emit('didFinishLaunching');
+
+      assert.strictEqual(api._registered.length, 1);
+    });
+
+    it('should migrate comma-separated string to array (legacy format)', () => {
+      const config = createConfig([
+        { name: 'Home', cities: 'תל אביב, חיפה' },
+      ]);
+      platform = new RedAlertPlatform(logger, config, api as any);
+      api.emit('didFinishLaunching');
+
+      assert.strictEqual(api._registered.length, 1);
+    });
+
+    it('should migrate single city string', () => {
+      const config = createConfig([
+        { name: 'Home', cities: 'פתח תקווה' },
+      ]);
+      platform = new RedAlertPlatform(logger, config, api as any);
+      api.emit('didFinishLaunching');
+
+      assert.strictEqual(api._registered.length, 1);
+    });
+
+    it('should skip sensors with empty cities array', () => {
+      const config = createConfig([
+        { name: 'Empty', cities: [] },
+        { name: 'Valid', cities: ['תל אביב - יפו'] },
+      ]);
+      platform = new RedAlertPlatform(logger, config, api as any);
+      api.emit('didFinishLaunching');
+
+      assert.strictEqual(api._registered.length, 1);
+      assert.strictEqual(api._registered[0].displayName, 'Valid');
+    });
+
+    it('should skip sensors with empty string cities (legacy)', () => {
+      const config = createConfig([
+        { name: 'Empty', cities: '' },
+        { name: 'Valid', cities: 'חיפה' },
+      ]);
+      platform = new RedAlertPlatform(logger, config, api as any);
+      api.emit('didFinishLaunching');
+
+      assert.strictEqual(api._registered.length, 1);
+      assert.strictEqual(api._registered[0].displayName, 'Valid');
+    });
+
+    it('should handle whitespace-only legacy string', () => {
+      const config = createConfig([
+        { name: 'Whitespace', cities: '  ,  , ' },
+        { name: 'Valid', cities: ['חיפה'] },
+      ]);
+      platform = new RedAlertPlatform(logger, config, api as any);
+      api.emit('didFinishLaunching');
+
+      assert.strictEqual(api._registered.length, 1);
+      assert.strictEqual(api._registered[0].displayName, 'Valid');
+    });
+
+    it('should trim whitespace from legacy comma-separated cities', () => {
+      const config = createConfig([
+        { name: 'Home', cities: '  תל אביב  ,  חיפה  ' },
+      ]);
+      platform = new RedAlertPlatform(logger, config, api as any);
+      api.emit('didFinishLaunching');
+
+      assert.strictEqual(api._registered.length, 1);
+    });
+  });
 });

@@ -1,0 +1,258 @@
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
+
+<style>
+  .sensor-card { border: 1px solid #dee2e6; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .sensor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .sensor-header h5 { margin: 0; }
+  .field-group { margin-bottom: 12px; }
+  .field-group label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 0.9em; }
+  .field-group .help-text { font-size: 0.8em; color: #6c757d; margin-top: 2px; }
+  .field-group input[type="text"], .field-group input[type="number"], .field-group select { width: 100%; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; }
+  .field-group input[type="checkbox"] { margin-right: 6px; }
+  .categories-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .btn-add { background: #198754; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+  .btn-remove { background: #dc3545; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
+  .btn-save { background: #0d6efd; color: white; border: none; padding: 10px 24px; border-radius: 4px; cursor: pointer; font-size: 1em; margin-top: 8px; }
+  .advanced-toggle { cursor: pointer; color: #0d6efd; font-weight: 600; margin-top: 16px; display: inline-block; }
+  .advanced-section { display: none; margin-top: 12px; border-top: 1px solid #dee2e6; padding-top: 12px; }
+  .advanced-section.show { display: block; }
+  .ts-wrapper { width: 100%; }
+</style>
+
+<div id="app">
+  <div style="text-align:center; margin-bottom:16px;">
+    <img src="plugin-icon.png" alt="Red Alert" style="width:80px; height:80px; border-radius:12px;">
+    <h4 style="margin:8px 0 4px">Red Alert</h4>
+    <p style="font-size:0.85em; color:#6c757d; margin:0;">Homebridge plugin for Pikud HaOref alerts</p>
+  </div>
+  <div id="sensors-container"></div>
+  <button class="btn-add" onclick="addSensor()">+ Add Sensor</button>
+  <br>
+  <span class="advanced-toggle" onclick="toggleAdvanced()">&#9654; Advanced Settings</span>
+  <div id="advanced-section" class="advanced-section">
+    <div class="field-group">
+      <label>Turn-Off Delay (ms)</label>
+      <input type="number" id="turnoff_delay" min="0" max="3600000" value="0">
+      <div class="help-text">Delay before turning off after alert ends. Default: 0 (instant).</div>
+    </div>
+    <div class="field-group">
+      <label>Alert Timeout (ms)</label>
+      <input type="number" id="alert_timeout" min="600000" max="3600000" value="1800000">
+      <div class="help-text">Auto-clear if "Event Ended" not received. Default: 1800000 (30 min).</div>
+    </div>
+    <div class="field-group">
+      <label>Polling Interval (ms)</label>
+      <input type="number" id="polling_interval" min="500" max="5000" value="1000">
+      <div class="help-text">How often to check for alerts. Default: 1000.</div>
+    </div>
+    <div class="field-group">
+      <label>Request Timeout (ms)</label>
+      <input type="number" id="request_timeout" min="1000" max="10000" value="3000">
+      <div class="help-text">API response timeout. Default: 3000.</div>
+    </div>
+    <div class="field-group">
+      <label><input type="checkbox" id="debug"> Enable Debug Logs</label>
+    </div>
+  </div>
+</div>
+
+<script>
+  let cities = [];
+  let sensors = [];
+  let tomInstances = {};
+  let sensorCounter = 0;
+
+  const CATEGORIES = [
+    { key: 'rockets', label: 'Rockets & Missiles (ירי רקטות וטילים)' },
+    { key: 'uav', label: 'UAV Intrusion (חדירת כלי טיס)' },
+    { key: 'nonconventional', label: 'Non-conventional Threat' },
+    { key: 'warning', label: 'Heads-up Notice (התרעה מוקדמת)' },
+    { key: 'earthquake', label: 'Earthquake (רעידת אדמה)' },
+    { key: 'cbrne', label: 'Chemical/Bio/Nuclear (CBRNE)' },
+    { key: 'terror', label: 'Terrorist Infiltration (חדירת מחבלים)' },
+    { key: 'tsunami', label: 'Tsunami (צונאמי)' },
+    { key: 'hazmat', label: 'Hazardous Materials (חומרים מסוכנים)' },
+  ];
+
+  async function init() {
+    homebridge.showSpinner();
+    try {
+      cities = await homebridge.request('/cities');
+    } catch (e) {
+      cities = [];
+      homebridge.toast.error('Failed to load cities list');
+    }
+
+    const config = (await homebridge.getPluginConfig())[0] || {};
+    sensors = config.sensors || [];
+
+    document.getElementById('turnoff_delay').value = config.turnoff_delay ?? 0;
+    document.getElementById('alert_timeout').value = config.alert_timeout ?? 1800000;
+    document.getElementById('polling_interval').value = config.polling_interval ?? 1000;
+    document.getElementById('request_timeout').value = config.request_timeout ?? 3000;
+    document.getElementById('debug').checked = config.debug ?? false;
+
+    if (!sensors.length) {
+      addSensor();
+    } else {
+      sensors.forEach((s, i) => renderSensor(s, i));
+    }
+    homebridge.hideSpinner();
+  }
+
+  function renderSensor(sensor, index) {
+    const id = sensorCounter++;
+    const container = document.getElementById('sensors-container');
+    const card = document.createElement('div');
+    card.className = 'sensor-card';
+    card.id = `sensor-${id}`;
+    card.dataset.index = index;
+
+    const sensorCities = normalizeCities(sensor);
+    const selectedCategories = sensor.categories || [];
+
+    card.innerHTML = `
+      <div class="sensor-header">
+        <h5>Sensor: ${sensor.name || 'New Sensor'}</h5>
+        <button class="btn-remove" onclick="removeSensor(${id})">Remove</button>
+      </div>
+      <div class="field-group">
+        <label>Sensor Name</label>
+        <input type="text" class="sensor-name" value="${escapeHtml(sensor.name || '')}" placeholder="e.g. Home">
+      </div>
+      <div class="field-group">
+        <label>Cities</label>
+        <select id="cities-${id}" multiple placeholder="Search and select cities..."></select>
+        <div class="help-text">Search for cities or type a custom name and press Enter.</div>
+      </div>
+      <div class="field-group">
+        <label>Alert Categories</label>
+        <div class="categories-grid">
+          ${CATEGORIES.map(c => `
+            <label><input type="checkbox" class="cat-checkbox" value="${c.key}"
+              ${selectedCategories.includes(c.key) ? 'checked' : ''}> ${c.label}</label>
+          `).join('')}
+        </div>
+        <div class="help-text">Leave all unchecked to monitor all categories.</div>
+      </div>
+      <div class="field-group">
+        <label><input type="checkbox" class="prefix-matching" ${sensor.prefix_matching ? 'checked' : ''}> Enable Prefix Matching</label>
+        <div class="help-text">Match sub-areas automatically (e.g. "תל אביב" matches "תל אביב - יפו").</div>
+      </div>
+    `;
+
+    container.appendChild(card);
+
+    const options = cities.map(c => ({
+      value: c.name,
+      text: c.area ? `${c.name} (${c.area})` : c.name,
+    }));
+
+    tomInstances[id] = new TomSelect(`#cities-${id}`, {
+      options: options,
+      items: sensorCities,
+      create: true,
+      createFilter: function(input) { return input.trim().length > 0; },
+      maxOptions: 100,
+      closeAfterSelect: false,
+      persist: false,
+      valueField: 'value',
+      labelField: 'text',
+      searchField: ['value', 'text'],
+      render: {
+        option_create: function(data, escape) {
+          return `<div class="create">Add: <strong>${escape(data.input)}</strong></div>`;
+        },
+      },
+    });
+
+    saveOnChange();
+  }
+
+  function normalizeCities(sensor) {
+    if (Array.isArray(sensor.cities)) {
+      return sensor.cities;
+    }
+    if (typeof sensor.cities === 'string' && sensor.cities.trim()) {
+      return sensor.cities.split(',').map(c => c.trim()).filter(Boolean);
+    }
+    return [];
+  }
+
+  function addSensor() {
+    const index = document.querySelectorAll('.sensor-card').length;
+    renderSensor({ name: '', cities: [], categories: [], prefix_matching: false }, index);
+  }
+
+  function removeSensor(id) {
+    if (tomInstances[id]) {
+      tomInstances[id].destroy();
+      delete tomInstances[id];
+    }
+    document.getElementById(`sensor-${id}`).remove();
+    saveConfig();
+  }
+
+  function collectConfig() {
+    const sensorCards = document.querySelectorAll('.sensor-card');
+    const collectedSensors = [];
+
+    sensorCards.forEach(card => {
+      const id = card.id.replace('sensor-', '');
+      const name = card.querySelector('.sensor-name').value.trim();
+      const selectedCities = tomInstances[id] ? tomInstances[id].getValue() : [];
+      const categories = [...card.querySelectorAll('.cat-checkbox:checked')].map(c => c.value);
+      const prefixMatching = card.querySelector('.prefix-matching').checked;
+
+      collectedSensors.push({
+        name: name,
+        cities: selectedCities,
+        ...(categories.length > 0 ? { categories } : {}),
+        ...(prefixMatching ? { prefix_matching: true } : {}),
+      });
+    });
+
+    return {
+      platform: 'RedAlert',
+      name: '@toharush/homebridge-redalert',
+      sensors: collectedSensors,
+      turnoff_delay: parseInt(document.getElementById('turnoff_delay').value) || 0,
+      alert_timeout: parseInt(document.getElementById('alert_timeout').value) || 1800000,
+      polling_interval: parseInt(document.getElementById('polling_interval').value) || 1000,
+      request_timeout: parseInt(document.getElementById('request_timeout').value) || 3000,
+      debug: document.getElementById('debug').checked,
+    };
+  }
+
+  async function saveConfig() {
+    const config = collectConfig();
+    await homebridge.updatePluginConfig([config]);
+  }
+
+  function saveOnChange() {
+    document.querySelectorAll('input, select').forEach(el => {
+      el.removeEventListener('change', saveConfig);
+      el.addEventListener('change', saveConfig);
+    });
+    Object.values(tomInstances).forEach(ts => {
+      ts.off('change');
+      ts.on('change', saveConfig);
+    });
+  }
+
+  function toggleAdvanced() {
+    const section = document.getElementById('advanced-section');
+    const toggle = document.querySelector('.advanced-toggle');
+    section.classList.toggle('show');
+    toggle.innerHTML = section.classList.contains('show') ? '&#9660; Advanced Settings' : '&#9654; Advanced Settings';
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  init();
+</script>
