@@ -83,7 +83,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       alertService.registerListener(filter);
 
       this.log.info(
-        `[${sensor.name}] Monitoring ${cities.length} cities, ${allowedCategories.size} category IDs, prefix=${prefixMatching}`,
+        `[${sensor.name}] Monitoring ${cities.length} cities (${cities.map(c => `"${c}"`).join(', ')}), ${allowedCategories.size} category IDs, prefix=${prefixMatching}`,
       );
     }
 

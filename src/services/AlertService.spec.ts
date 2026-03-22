@@ -57,7 +57,7 @@ function makeAlert(cat: OrefCategory, cities: string[]): OrefRealtimeAlert {
 function makeEventEnded(cities: string[]): OrefRealtimeAlert {
   return {
     id: '134180724020000000',
-    cat: String(OrefCategory.HeadsUpNotice),
+    cat: String(OrefCategory.EventEnded),
     title: EVENT_ENDED_TITLE,
     data: cities,
     desc: 'השוהים במרחב המוגן יכולים לצאת.',
@@ -198,10 +198,33 @@ describe('SensorFilter', () => {
     assert.strictEqual(accessory.lastState!.isActive, true);
   });
 
-  it('should only treat cat 10 as event ended when title matches', () => {
+  it('should only treat EventEnded category (99) as event ended', () => {
     feedAlerts(filter, [makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
     feedAlerts(filter, [makeEventEnded(['תל אביב'])]);
     assert.strictEqual(accessory.lastState!.isActive, false);
+  });
+
+  it('should NOT treat cat 10 with unknown title as event ended but should refresh timestamp', () => {
+    const rocketSensor = createMockAccessory();
+    const rocketFilter = createFilter(log, rocketSensor, ['תל אביב'], new Set(CATEGORY_MAP['rockets']), 100);
+
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+
+    // Age past timeout
+    const activeCities = (rocketFilter as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 200);
+
+    // Cat 10 with unknown title — NOT EventEnded, but IS HeadsUpNotice → refreshes active city
+    const unknownCat10: OrefRealtimeAlert = {
+      id: '999',
+      cat: String(OrefCategory.HeadsUpNotice),
+      title: 'some unknown title',
+      data: ['תל אביב'],
+      desc: '',
+    };
+    rocketFilter.handleAlerts([unknownCat10]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true, 'notice refreshes any active sensor');
   });
 
   it('should clear sub-area alert when event ended for parent city (prefix matching)', () => {
@@ -915,6 +938,133 @@ describe('SensorFilter', () => {
     assert.strictEqual(accessory.lastState!.isActive, true); // should NOT be cleared
   });
 
+  it('Event Ended clears rocket alert (OREF sends one Event Ended for all categories)', () => {
+    const rocketSensor = createMockAccessory();
+    const rocketFilter = createFilter(log, rocketSensor, ['תל אביב'], new Set(CATEGORY_MAP['rockets']));
+
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+
+    // Event Ended is category-agnostic — clears any active alert for the city
+    rocketFilter.handleAlerts([makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, false);
+  });
+
+  it('should refresh rocket sensor timestamp when notice arrives for already-active city', () => {
+    const rocketSensor = createMockAccessory();
+    const rocketFilter = createFilter(log, rocketSensor, ['תל אביב'], new Set(CATEGORY_MAP['rockets']), 100);
+
+    // Rocket alert activates
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+
+    // Age past timeout
+    const activeCities = (rocketFilter as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 200);
+
+    // Notice arrives — city already active, so refresh timestamp (situation ongoing)
+    rocketFilter.handleAlerts([makeHeadsUpNotice(['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+    assert.ok(Date.now() - activeCities.get('תל אביב')! < 50);
+  });
+
+  it('should NOT activate rocket sensor from notice alone (no existing alert)', () => {
+    const rocketSensor = createMockAccessory();
+    const rocketFilter = createFilter(log, rocketSensor, ['תל אביב'], new Set(CATEGORY_MAP['rockets']));
+
+    // Notice arrives but rocket sensor has no active alert — should NOT activate
+    rocketFilter.handleAlerts([makeHeadsUpNotice(['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, false);
+  });
+
+  it('should refresh notice sensor from rocket alert on already-active city', () => {
+    const noticeSensor = createMockAccessory();
+    const noticeFilter = createFilter(log, noticeSensor, ['תל אביב'], new Set(CATEGORY_MAP['warning']), 100);
+
+    // Notice activates
+    noticeFilter.handleAlerts([makeHeadsUpNotice(['תל אביב'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+
+    // Age past timeout
+    const activeCities = (noticeFilter as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 200);
+
+    // Rocket alert refreshes notice sensor — city is still under alert
+    noticeFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+  });
+
+  it('full scenario: notice + rocket sensors on same city through entire alert lifecycle', () => {
+    const noticeSensor = createMockAccessory();
+    const rocketSensor = createMockAccessory();
+    const noticeFilter = createFilter(log, noticeSensor, ['תל אביב'], new Set(CATEGORY_MAP['warning']), 100);
+    const rocketFilter = createFilter(log, rocketSensor, ['תל אביב'], new Set(CATEGORY_MAP['rockets']), 100);
+
+    const broadcast = (alerts: OrefRealtimeAlert[]) => {
+      noticeFilter.handleAlerts(alerts);
+      rocketFilter.handleAlerts(alerts);
+    };
+
+    // 1. Heads-up notice arrives — only notice sensor triggers
+    broadcast([makeHeadsUpNotice(['תל אביב'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+    assert.strictEqual(rocketSensor.lastState!.isActive, false);
+
+    // 2. Rocket alert arrives — rocket sensor activates
+    broadcast([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+
+    // 3. Age notice sensor past timeout, rocket alert keeps it alive
+    const noticeActiveCities = (noticeFilter as any).activeCities as Map<string, number>;
+    noticeActiveCities.set('תל אביב', Date.now() - 200);
+    broadcast([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true, 'notice sensor refreshed by rocket alert');
+
+    // 4. Age rocket sensor past timeout, notice keeps it alive
+    const rocketActiveCities = (rocketFilter as any).activeCities as Map<string, number>;
+    rocketActiveCities.set('תל אביב', Date.now() - 200);
+    broadcast([makeHeadsUpNotice(['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true, 'rocket sensor refreshed by notice');
+
+    // 5. Event Ended — both sensors clear
+    broadcast([makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, false);
+    assert.strictEqual(rocketSensor.lastState!.isActive, false);
+  });
+
+  it('should NOT refresh rocket sensor from unrelated earthquake alert', () => {
+    const rocketSensor = createMockAccessory();
+    const rocketFilter = createFilter(log, rocketSensor, ['תל אביב'], new Set(CATEGORY_MAP['rockets']), 100);
+
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+
+    // Age past timeout
+    const activeCities = (rocketFilter as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 200);
+
+    // Earthquake is in a different related group — should NOT refresh rocket sensor
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.Earthquake, ['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, false);
+  });
+
+  it('should refresh earthquake sensor from tsunami alert (same related group)', () => {
+    const eqSensor = createMockAccessory();
+    const eqFilter = createFilter(log, eqSensor, ['תל אביב'], new Set(CATEGORY_MAP['earthquake']), 100);
+
+    eqFilter.handleAlerts([makeAlert(OrefCategory.Earthquake, ['תל אביב'])]);
+    assert.strictEqual(eqSensor.lastState!.isActive, true);
+
+    // Age past timeout
+    const activeCities = (eqFilter as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 200);
+
+    // Tsunami is in the same related group as earthquake
+    eqFilter.handleAlerts([makeAlert(OrefCategory.Tsunami, ['תל אביב'])]);
+    assert.strictEqual(eqSensor.lastState!.isActive, true);
+  });
+
   it('should handle all categories firing at once', () => {
     const allAlerts = [
       makeAlert(OrefCategory.Rockets, ['תל אביב']),
@@ -1150,5 +1300,417 @@ describe('getCategoryName', () => {
 
   it('should return unknown for unrecognized categories', () => {
     assert.strictEqual(getCategoryName(999), 'unknown');
+  });
+});
+
+// Regression tests for v1.3.10 bug fixes:
+// - Event Ended separated from HeadsUpNotice (both were cat 10)
+// - Related categories refresh timestamps to prevent premature safety timeout
+describe('Regression: Event Ended and cross-category timestamp refresh', () => {
+  let log: any;
+
+  beforeEach(() => {
+    log = createMockLogger();
+  });
+
+  it('REG-1: notice sensor should not expire while rocket alerts keep arriving', () => {
+    // Original bug: user had notice + rocket sensors on same city.
+    // Notice sensor expired after 30min because rocket alerts (different category)
+    // did not refresh the notice sensor timestamp.
+    const noticeSensor = createMockAccessory();
+    const noticeFilter = createFilter(log, noticeSensor, ['פתח תקווה'], new Set(CATEGORY_MAP['warning']), 200);
+
+    // 1. Notice arrives — sensor activates
+    noticeFilter.handleAlerts([makeHeadsUpNotice(['פתח תקווה'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+
+    // 2. Simulate time passing with repeated rocket alerts
+    const activeCities = (noticeFilter as any).activeCities as Map<string, number>;
+    for (let i = 0; i < 5; i++) {
+      activeCities.set('פתח תקווה', Date.now() - 190); // near timeout
+      noticeFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['פתח תקווה'])]);
+      assert.strictEqual(noticeSensor.lastState!.isActive, true, `wave ${i}: notice sensor should stay alive`);
+    }
+
+    // 3. Event Ended finally arrives — clears
+    noticeFilter.handleAlerts([makeEventEnded(['פתח תקווה'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, false);
+  });
+
+  it('REG-2: rocket sensor should not expire while notices keep arriving', () => {
+    const rocketSensor = createMockAccessory();
+    const rocketFilter = createFilter(log, rocketSensor, ['תל אביב'], new Set(CATEGORY_MAP['rockets']), 200);
+
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+
+    const activeCities = (rocketFilter as any).activeCities as Map<string, number>;
+    for (let i = 0; i < 5; i++) {
+      activeCities.set('תל אביב', Date.now() - 190);
+      rocketFilter.handleAlerts([makeHeadsUpNotice(['תל אביב'])]);
+      assert.strictEqual(rocketSensor.lastState!.isActive, true, `wave ${i}: rocket sensor should stay alive`);
+    }
+
+    rocketFilter.handleAlerts([makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, false);
+  });
+
+  it('REG-3: Event Ended (cat 99) clears all sensors regardless of their category', () => {
+    const noticeSensor = createMockAccessory();
+    const rocketSensor = createMockAccessory();
+    const eqSensor = createMockAccessory();
+    const noticeFilter = createFilter(log, noticeSensor, ['חיפה'], new Set(CATEGORY_MAP['warning']));
+    const rocketFilter = createFilter(log, rocketSensor, ['חיפה'], new Set(CATEGORY_MAP['rockets']));
+    const eqFilter = createFilter(log, eqSensor, ['חיפה'], new Set(CATEGORY_MAP['earthquake']));
+
+    // Activate all three
+    noticeFilter.handleAlerts([makeHeadsUpNotice(['חיפה'])]);
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['חיפה'])]);
+    eqFilter.handleAlerts([makeAlert(OrefCategory.Earthquake, ['חיפה'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+    assert.strictEqual(eqSensor.lastState!.isActive, true);
+
+    // Single Event Ended clears all
+    const ended = [makeEventEnded(['חיפה'])];
+    noticeFilter.handleAlerts(ended);
+    rocketFilter.handleAlerts(ended);
+    eqFilter.handleAlerts(ended);
+    assert.strictEqual(noticeSensor.lastState!.isActive, false);
+    assert.strictEqual(rocketSensor.lastState!.isActive, false);
+    assert.strictEqual(eqSensor.lastState!.isActive, false);
+  });
+
+  it('REG-4: unrelated categories do NOT refresh each other', () => {
+    // Earthquake should not keep a rocket sensor alive
+    const rocketSensor = createMockAccessory();
+    const rocketFilter = createFilter(log, rocketSensor, ['תל אביב'], new Set(CATEGORY_MAP['rockets']), 100);
+
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+
+    const activeCities = (rocketFilter as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 200);
+
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.Earthquake, ['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, false, 'earthquake should not refresh rocket sensor');
+  });
+
+  it('REG-5: cross-category alert does NOT activate a new city — only refreshes existing', () => {
+    const rocketSensor = createMockAccessory();
+    const rocketFilter = createFilter(log, rocketSensor, ['תל אביב', 'חיפה'], new Set(CATEGORY_MAP['rockets']));
+
+    // Rocket alert activates תל אביב
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.activeCities.size, 1);
+    assert.ok(rocketSensor.lastState!.activeCities.has('תל אביב'));
+
+    // Notice for חיפה — חיפה is configured but not active, should NOT activate it
+    rocketFilter.handleAlerts([makeHeadsUpNotice(['חיפה'])]);
+    assert.strictEqual(rocketSensor.lastState!.activeCities.size, 1);
+    assert.ok(!rocketSensor.lastState!.activeCities.has('חיפה'));
+  });
+
+  it('REG-6: HeadsUpNotice (cat 10) is not confused with Event Ended (cat 99)', () => {
+    const rocketSensor = createMockAccessory();
+    const rocketFilter = createFilter(log, rocketSensor, ['תל אביב'], new Set(CATEGORY_MAP['rockets']));
+
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+
+    // HeadsUpNotice has the same original OREF cat (10) as Event Ended,
+    // but OrefClient remaps Event Ended to cat 99.
+    // A notice should NOT clear the alert.
+    rocketFilter.handleAlerts([makeHeadsUpNotice(['תל אביב'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+  });
+
+  it('REG-7: multi-city sensor stays ON until ALL cities cleared', () => {
+    const sensor = createMockAccessory();
+    const filter = createFilter(log, sensor, ['תל אביב', 'חיפה', 'באר שבע'], allCategoryIds());
+
+    // Alert for all three
+    filter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב', 'חיפה', 'באר שבע'])]);
+    assert.strictEqual(sensor.lastState!.isActive, true);
+    assert.strictEqual(sensor.lastState!.activeCities.size, 3);
+
+    // Event Ended one at a time — sensor stays ON until last city cleared
+    filter.handleAlerts([makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(sensor.lastState!.isActive, true);
+    assert.strictEqual(sensor.lastState!.activeCities.size, 2);
+
+    filter.handleAlerts([makeEventEnded(['חיפה'])]);
+    assert.strictEqual(sensor.lastState!.isActive, true);
+    assert.strictEqual(sensor.lastState!.activeCities.size, 1);
+
+    filter.handleAlerts([makeEventEnded(['באר שבע'])]);
+    assert.strictEqual(sensor.lastState!.isActive, false);
+    assert.strictEqual(sensor.lastState!.activeCities.size, 0);
+  });
+
+  it('REG-8: misspelled city name (פתח תקוה vs פתח תקווה) does NOT match', () => {
+    // User configured "פתח תקוה" (missing ו) but OREF sends "פתח תקווה"
+    const sensor = createMockAccessory();
+    const exactFilter = createFilter(log, sensor, ['פתח תקוה'], allCategoryIds());
+
+    // Exact match — should NOT trigger
+    exactFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['פתח תקווה'])]);
+    assert.strictEqual(sensor.lastState!.isActive, false, 'exact match should fail for misspelled city');
+  });
+
+  it('REG-9: misspelled city with prefix matching — פתח תקוה vs פתח תקווה', () => {
+    // "פתח תקוה" is NOT a prefix of "פתח תקווה" (they diverge at תקוה vs תקווה)
+    const sensor = createMockAccessory();
+    const prefixFilter = createFilter(log, sensor, ['פתח תקוה'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, true);
+
+    prefixFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['פתח תקווה'])]);
+    assert.strictEqual(sensor.lastState!.isActive, false, 'prefix match should also fail — not a prefix');
+  });
+
+  it('REG-10: sensor with both correct and wrong city — only correct matches', () => {
+    // Three sensors: one with both names, one correct only, one wrong only
+    const bothSensor = createMockAccessory();
+    const correctSensor = createMockAccessory();
+    const wrongSensor = createMockAccessory();
+    const bothFilter = createFilter(log, bothSensor, ['פתח תקווה', 'פתח תקוה'], new Set(CATEGORY_MAP['rockets']));
+    const correctFilter = createFilter(log, correctSensor, ['פתח תקווה'], new Set(CATEGORY_MAP['rockets']));
+    const wrongFilter = createFilter(log, wrongSensor, ['פתח תקוה'], new Set(CATEGORY_MAP['rockets']));
+
+    const alerts = [makeAlert(OrefCategory.Rockets, ['פתח תקווה'])];
+    bothFilter.handleAlerts(alerts);
+    correctFilter.handleAlerts(alerts);
+    wrongFilter.handleAlerts(alerts);
+
+    // Both-sensor activates only the correct city, wrong city stays inactive
+    assert.strictEqual(bothSensor.lastState!.isActive, true);
+    assert.strictEqual(bothSensor.lastState!.activeCities.size, 1);
+    assert.ok(bothSensor.lastState!.activeCities.has('פתח תקווה'));
+    assert.ok(!bothSensor.lastState!.activeCities.has('פתח תקוה'));
+
+    assert.strictEqual(correctSensor.lastState!.isActive, true, 'correct-only sensor matches');
+    assert.strictEqual(wrongSensor.lastState!.isActive, false, 'wrong-only sensor does not match');
+
+    // Event Ended
+    const ended = [makeEventEnded(['פתח תקווה'])];
+    bothFilter.handleAlerts(ended);
+    correctFilter.handleAlerts(ended);
+    wrongFilter.handleAlerts(ended);
+    assert.strictEqual(bothSensor.lastState!.isActive, false);
+    assert.strictEqual(correctSensor.lastState!.isActive, false);
+    assert.strictEqual(wrongSensor.lastState!.isActive, false);
+  });
+
+  it('REG-11: full real-world scenario with correct city name', () => {
+    const noticeSensor = createMockAccessory();
+    const rocketSensor = createMockAccessory();
+    const noticeFilter = createFilter(log, noticeSensor, ['פתח תקווה'], new Set(CATEGORY_MAP['warning']));
+    const rocketFilter = createFilter(log, rocketSensor, ['פתח תקווה'], new Set(CATEGORY_MAP['rockets']));
+
+    const broadcast = (alerts: OrefRealtimeAlert[]) => {
+      noticeFilter.handleAlerts(alerts);
+      rocketFilter.handleAlerts(alerts);
+    };
+
+    // Step 1: OREF sends heads-up notice
+    broadcast([makeHeadsUpNotice(['פתח תקווה'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+    assert.strictEqual(rocketSensor.lastState!.isActive, false);
+
+    // Step 2: OREF sends rocket alert
+    broadcast([makeAlert(OrefCategory.Rockets, ['פתח תקווה'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+
+    // Step 3: Multiple rocket waves — both sensors stay alive
+    for (let i = 0; i < 3; i++) {
+      broadcast([makeAlert(OrefCategory.Rockets, ['פתח תקווה'])]);
+      assert.strictEqual(noticeSensor.lastState!.isActive, true, `wave ${i}`);
+      assert.strictEqual(rocketSensor.lastState!.isActive, true, `wave ${i}`);
+    }
+
+    // Step 4: Empty polls (OREF returns nothing between waves)
+    for (let i = 0; i < 10; i++) {
+      broadcast([]);
+    }
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+
+    // Step 5: OREF sends Event Ended — both clear
+    broadcast([makeEventEnded(['פתח תקווה'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, false);
+    assert.strictEqual(rocketSensor.lastState!.isActive, false);
+  });
+
+  it('REG-12: UAV refreshes rocket sensor (same related group)', () => {
+    const rocketSensor = createMockAccessory();
+    const rocketFilter = createFilter(log, rocketSensor, ['חיפה'], new Set(CATEGORY_MAP['rockets']), 100);
+
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['חיפה'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+
+    const activeCities = (rocketFilter as any).activeCities as Map<string, number>;
+    activeCities.set('חיפה', Date.now() - 200);
+
+    // UAV is in the same security group as rockets
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.UAVIntrusion, ['חיפה'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true, 'UAV should refresh rocket sensor');
+  });
+
+  it('REG-13: hazmat does NOT refresh rocket sensor (different group)', () => {
+    const rocketSensor = createMockAccessory();
+    const rocketFilter = createFilter(log, rocketSensor, ['חיפה'], new Set(CATEGORY_MAP['rockets']), 100);
+
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.Rockets, ['חיפה'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+
+    const activeCities = (rocketFilter as any).activeCities as Map<string, number>;
+    activeCities.set('חיפה', Date.now() - 200);
+
+    rocketFilter.handleAlerts([makeAlert(OrefCategory.HazardousMaterials, ['חיפה'])]);
+    assert.strictEqual(rocketSensor.lastState!.isActive, false, 'hazmat should not refresh rocket sensor');
+  });
+
+  it('REG-14: terror refreshes notice sensor (same related group)', () => {
+    const noticeSensor = createMockAccessory();
+    const noticeFilter = createFilter(log, noticeSensor, ['באר שבע'], new Set(CATEGORY_MAP['warning']), 100);
+
+    noticeFilter.handleAlerts([makeHeadsUpNotice(['באר שבע'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+
+    const activeCities = (noticeFilter as any).activeCities as Map<string, number>;
+    activeCities.set('באר שבע', Date.now() - 200);
+
+    noticeFilter.handleAlerts([makeAlert(OrefCategory.TerroristInfiltration, ['באר שבע'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, true, 'terror should refresh notice sensor');
+  });
+
+  it('REG-15: multiple cities — one refreshed by related alert, other expires', () => {
+    const sensor = createMockAccessory();
+    const filter = createFilter(log, sensor, ['תל אביב', 'חיפה'], new Set(CATEGORY_MAP['rockets']), 100);
+
+    // Both cities active from rockets
+    filter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב', 'חיפה'])]);
+    assert.strictEqual(sensor.lastState!.activeCities.size, 2);
+
+    // Age both past timeout
+    const activeCities = (filter as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 200);
+    activeCities.set('חיפה', Date.now() - 200);
+
+    // Notice only for תל אביב — refreshes תל אביב, חיפה expires
+    filter.handleAlerts([makeHeadsUpNotice(['תל אביב'])]);
+    assert.strictEqual(sensor.lastState!.isActive, true);
+    assert.ok(sensor.lastState!.activeCities.has('תל אביב'), 'תל אביב refreshed by notice');
+    assert.ok(!sensor.lastState!.activeCities.has('חיפה'), 'חיפה expired — no refresh');
+  });
+
+  it('REG-16: Event Ended for one city while new alert arrives for another in same batch', () => {
+    const sensor = createMockAccessory();
+    const filter = createFilter(log, sensor, ['תל אביב', 'חיפה'], allCategoryIds());
+
+    filter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(sensor.lastState!.isActive, true);
+
+    // Same batch: Event Ended for תל אביב + new alert for חיפה
+    filter.handleAlerts([
+      makeEventEnded(['תל אביב']),
+      makeAlert(OrefCategory.Rockets, ['חיפה']),
+    ]);
+    assert.strictEqual(sensor.lastState!.isActive, true);
+    assert.ok(!sensor.lastState!.activeCities.has('תל אביב'));
+    assert.ok(sensor.lastState!.activeCities.has('חיפה'));
+  });
+
+  it('REG-17: rapid notice → rocket → notice → rocket cycle keeps sensors alive', () => {
+    const noticeSensor = createMockAccessory();
+    const rocketSensor = createMockAccessory();
+    const noticeFilter = createFilter(log, noticeSensor, ['תל אביב'], new Set(CATEGORY_MAP['warning']), 100);
+    const rocketFilter = createFilter(log, rocketSensor, ['תל אביב'], new Set(CATEGORY_MAP['rockets']), 100);
+
+    const broadcast = (alerts: OrefRealtimeAlert[]) => {
+      noticeFilter.handleAlerts(alerts);
+      rocketFilter.handleAlerts(alerts);
+    };
+
+    // Multiple waves of notice → rocket
+    for (let wave = 0; wave < 3; wave++) {
+      broadcast([makeHeadsUpNotice(['תל אביב'])]);
+      assert.strictEqual(noticeSensor.lastState!.isActive, true, `wave ${wave}: notice on`);
+
+      broadcast([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+      assert.strictEqual(rocketSensor.lastState!.isActive, true, `wave ${wave}: rocket on`);
+
+      // Age both
+      const noticeActive = (noticeFilter as any).activeCities as Map<string, number>;
+      const rocketActive = (rocketFilter as any).activeCities as Map<string, number>;
+      noticeActive.set('תל אביב', Date.now() - 90);
+      rocketActive.set('תל אביב', Date.now() - 90);
+    }
+
+    // Both still alive after multiple waves
+    assert.strictEqual(noticeSensor.lastState!.isActive, true);
+    assert.strictEqual(rocketSensor.lastState!.isActive, true);
+
+    // Event Ended clears both
+    broadcast([makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(noticeSensor.lastState!.isActive, false);
+    assert.strictEqual(rocketSensor.lastState!.isActive, false);
+  });
+
+  it('REG-18: all-categories sensor gets cross-category refresh', () => {
+    const sensor = createMockAccessory();
+    const filter = createFilter(log, sensor, ['תל אביב'], allCategoryIds(), 100);
+
+    filter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(sensor.lastState!.isActive, true);
+
+    const activeCities = (filter as any).activeCities as Map<string, number>;
+    activeCities.set('תל אביב', Date.now() - 200);
+
+    // Notice refreshes (same related group as rockets)
+    filter.handleAlerts([makeHeadsUpNotice(['תל אביב'])]);
+    assert.strictEqual(sensor.lastState!.isActive, true);
+  });
+
+  it('REG-19: prefix matching with correct spelling matches sub-areas', () => {
+    const sensor = createMockAccessory();
+    const filter = createFilter(log, sensor, ['פתח תקווה'], new Set(CATEGORY_MAP['rockets']), DEFAULT_ALERT_TIMEOUT, true);
+
+    // Sub-area alert
+    filter.handleAlerts([makeAlert(OrefCategory.Rockets, ['פתח תקווה - מזרח'])]);
+    assert.strictEqual(sensor.lastState!.isActive, true);
+    assert.ok(sensor.lastState!.activeCities.has('פתח תקווה'));
+
+    // Event Ended for parent clears
+    filter.handleAlerts([makeEventEnded(['פתח תקווה'])]);
+    assert.strictEqual(sensor.lastState!.isActive, false);
+  });
+
+  it('REG-20: prefix matching with misspelled city does NOT match sub-areas', () => {
+    const sensor = createMockAccessory();
+    const filter = createFilter(log, sensor, ['פתח תקוה'], new Set(CATEGORY_MAP['rockets']), DEFAULT_ALERT_TIMEOUT, true);
+
+    // "פתח תקוה" is NOT a prefix of "פתח תקווה - מזרח"
+    filter.handleAlerts([makeAlert(OrefCategory.Rockets, ['פתח תקווה - מזרח'])]);
+    assert.strictEqual(sensor.lastState!.isActive, false, 'misspelled prefix does not match');
+  });
+
+  it('REG-21: double Event Ended does not crash or re-activate', () => {
+    const sensor = createMockAccessory();
+    const filter = createFilter(log, sensor, ['תל אביב'], allCategoryIds());
+
+    filter.handleAlerts([makeAlert(OrefCategory.Rockets, ['תל אביב'])]);
+    assert.strictEqual(sensor.lastState!.isActive, true);
+
+    filter.handleAlerts([makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(sensor.lastState!.isActive, false);
+
+    // Second Event Ended — should be idempotent
+    filter.handleAlerts([makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(sensor.lastState!.isActive, false);
+
+    // Third one for good measure
+    filter.handleAlerts([makeEventEnded(['תל אביב'])]);
+    assert.strictEqual(sensor.lastState!.isActive, false);
   });
 });
