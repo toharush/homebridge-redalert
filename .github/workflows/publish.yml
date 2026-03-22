@@ -1,4 +1,4 @@
-name: Publish to npm
+name: Publish Release
 
 on:
   release:
@@ -8,7 +8,12 @@ permissions:
   contents: write
 
 jobs:
+  ci:
+    if: "!contains(github.ref_name, '-')"
+    uses: ./.github/workflows/ci.yml
+
   publish:
+    needs: ci
     runs-on: ubuntu-latest
 
     steps:
@@ -30,29 +35,13 @@ jobs:
             echo "on_main=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Determine npm dist-tag
-        id: dist-tag
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          if [[ "${{ steps.branch-check.outputs.on_main }}" == "true" && "$VERSION" != *"-"* ]]; then
-            echo "tag=latest" >> "$GITHUB_OUTPUT"
-          elif [[ "$VERSION" == *"-"* ]]; then
-            echo "tag=${VERSION#*-}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=next" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Set version from release tag
-        run: |
-          npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
 
       - run: npm install
-      - run: npm run lint
-      - run: npm run build
-      - run: npm test
 
       - name: Commit version bump and update tag
-        if: steps.branch-check.outputs.on_main == 'true' && !contains(github.ref_name, '-')
+        if: steps.branch-check.outputs.on_main == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -62,6 +51,18 @@ jobs:
           git tag -f "${GITHUB_REF_NAME}"
           git push origin "${GITHUB_REF_NAME}" --force
 
-      - run: npm publish --access public --tag ${{ steps.dist-tag.outputs.tag }}
+      - name: Publish to npm
+        run: npm publish --access public --tag latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Cleanup old release tags (keep last 3)
+        run: |
+          git fetch --tags --force
+          STABLE_TAGS=$(git tag -l 'v*' --sort=-version:refname | grep -v '\-')
+          echo "$STABLE_TAGS" | tail -n +4 | while read -r tag; do
+            [ -z "$tag" ] && continue
+            echo "Deleting old tag: $tag"
+            git push origin --delete "$tag" 2>/dev/null || true
+            git tag -d "$tag" 2>/dev/null || true
+          done
