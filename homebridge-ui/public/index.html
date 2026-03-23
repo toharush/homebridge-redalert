@@ -11,6 +11,8 @@
   .field-group input[type="text"], .field-group input[type="number"], .field-group select { width: 100%; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; }
   .field-group input[type="checkbox"] { margin-right: 6px; }
   .categories-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .category-hint { font-size: 0.75em; color: #856404; background: #fff3cd; border-radius: 4px; padding: 4px 8px; margin: 2px 0 6px 22px; grid-column: 1 / -1; }
+  @media (prefers-color-scheme: dark) { .category-hint { background: #332701; color: #ffda6a; } }
   .btn-add { background: #198754; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
   .btn-remove { background: #dc3545; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
   .btn-save { background: #0d6efd; color: white; border: none; padding: 10px 24px; border-radius: 4px; cursor: pointer; font-size: 1em; margin-top: 8px; }
@@ -80,7 +82,7 @@
     { key: 'rockets', label: 'Rockets & Missiles (ירי רקטות וטילים)' },
     { key: 'uav', label: 'UAV Intrusion (חדירת כלי טיס)' },
     { key: 'nonconventional', label: 'Non-conventional Threat' },
-    { key: 'warning', label: 'Heads-up Notice (התרעה מוקדמת)' },
+    { key: 'warning', label: 'Heads-up Notice (התרעה מוקדמת)', hint: 'Tip: Notices may end before the actual alert. Consider adding Rockets too, or create a separate sensor for each. / התרעה מוקדמת משתחררת לפני ההתרעה של פיקוד העורף ועלולה להסתיים לפניה. מומלץ לשלב עם רקטות או ליצור סנסור נפרד.' },
     { key: 'earthquake', label: 'Earthquake (רעידת אדמה)' },
     { key: 'cbrne', label: 'Chemical/Bio/Nuclear (CBRNE)' },
     { key: 'terror', label: 'Terrorist Infiltration (חדירת מחבלים)' },
@@ -152,6 +154,7 @@
           ${CATEGORIES.map(c => `
             <label><input type="checkbox" class="cat-checkbox" value="${c.key}"
               ${selectedCategories.includes(c.key) ? 'checked' : ''}> ${c.label}</label>
+            ${c.hint ? `<div class="category-hint">${c.hint}</div>` : ''}
           `).join('')}
         </div>
         <div class="help-text">Leave all unchecked to monitor all categories.</div>
