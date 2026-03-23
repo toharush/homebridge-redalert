@@ -26,7 +26,7 @@ export class OrefClient implements AlertClient {
       const parsed = JSON.parse(cleaned);
       const alerts: OrefRealtimeAlert[] = _.isArray(parsed) ? parsed : [parsed];
       return _.map(alerts, (alert) =>
-        alert.cat === String(OrefCategory.HeadsUpNotice) && alert.title === EVENT_ENDED_TITLE
+        alert.cat === String(OrefCategory.HeadsUpNotice) && _.includes(alert.title, EVENT_ENDED_TITLE)
           ? { ...alert, cat: String(OrefCategory.EventEnded) }
           : alert,
       );
