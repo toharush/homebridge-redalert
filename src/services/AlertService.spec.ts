@@ -1834,3 +1834,24 @@ describe('Regression: Event Ended and cross-category timestamp refresh', () => {
   });
 
 });
+
+describe('Performance: Event Ended processing time', () => {
+  it('should process Event Ended for many cities within 50ms', () => {
+    const log = createMockLogger();
+    const accessory = createMockAccessory();
+    const manyCities = Array.from({ length: 500 }, (_, i) => `עיר-${i}`);
+    const filter = createFilter(log, accessory, manyCities, allCategoryIds());
+
+    // Activate all cities
+    feedAlerts(filter, [makeAlert(OrefCategory.Rockets, manyCities)]);
+    assert.strictEqual(accessory.lastState!.isActive, true);
+
+    // Measure Event Ended processing time
+    const start = performance.now();
+    feedAlerts(filter, [makeEventEnded(manyCities)]);
+    const elapsed = performance.now() - start;
+
+    assert.strictEqual(accessory.lastState!.isActive, false);
+    assert.ok(elapsed < 50, `Event Ended took ${elapsed.toFixed(1)}ms, expected < 50ms`);
+  });
+});
