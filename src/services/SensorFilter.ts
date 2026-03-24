@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { OrefRealtimeAlert, AlertState, OrefCategory, getRelatedCategories } from '../types';
+import { OrefRealtimeAlert, AlertState, OrefCategory } from '../types';
 import { DebugLogger } from '../utils/debugLogger';
 
 export interface AlertListener {
@@ -14,7 +14,6 @@ export class SensorFilter implements AlertListener {
   private readonly citySet: Set<string>;
   private readonly activeCities = new Map<string, number>();
   private readonly maxActiveAgeMs: number;
-  private readonly relatedCategories: Set<number>;
 
   constructor(
     private readonly name: string,
@@ -27,26 +26,15 @@ export class SensorFilter implements AlertListener {
   ) {
     this.citySet = new Set(cities);
     this.maxActiveAgeMs = alertTimeoutMs;
-    const related = new Set<number>();
-    for (const cat of allowedCategories) {
-      for (const r of getRelatedCategories(cat)) {
-        related.add(r);
-      }
-    }
-    this.relatedCategories = related;
   }
 
   handleAlerts(alerts: OrefRealtimeAlert[]): void {
     const isEventEnded = (alert: OrefRealtimeAlert) => _.toInteger(alert.cat) === OrefCategory.EventEnded;
 
     const endedAlerts = _.filter(alerts, isEventEnded);
-    const allActiveAlerts = _.filter(alerts, (alert) => {
+    const relevantAlerts = _.filter(alerts, (alert) => {
       const categoryId = _.toInteger(alert.cat);
-      return categoryId > 0 && !isEventEnded(alert);
-    });
-    const relevantAlerts = _.filter(allActiveAlerts, (alert) => {
-      const categoryId = _.toInteger(alert.cat);
-      return this.allowedCategories.has(categoryId);
+      return categoryId > 0 && !isEventEnded(alert) && this.allowedCategories.has(categoryId);
     });
 
     _(endedAlerts)
@@ -55,21 +43,6 @@ export class SensorFilter implements AlertListener {
         const matched = this.findConfiguredCity(city);
         if (matched && this.activeCities.delete(matched)) {
           this.log.info(`[${this.name}] Event ended: ${matched}`);
-        }
-      });
-
-    // Refresh timestamps for already-active cities from related categories.
-    // e.g. rockets and notices are related, so a notice keeps a rocket sensor alive.
-    const relatedAlerts = _.filter(allActiveAlerts, (alert) =>
-      this.relatedCategories.has(_.toInteger(alert.cat)),
-    );
-
-    _(relatedAlerts)
-      .flatMap((alert) => alert.data)
-      .forEach((city) => {
-        const matched = this.findConfiguredCity(city);
-        if (matched && this.activeCities.has(matched)) {
-          this.activeCities.set(matched, Date.now());
         }
       });
 

@@ -256,8 +256,13 @@
 
   async function saveConfig() {
     if (initializing) return;
-    const config = collectConfig();
-    await homebridge.updatePluginConfig([config]);
+    try {
+      const config = collectConfig();
+      await homebridge.updatePluginConfig([config]);
+      homebridge.toast.success('Configuration saved successfully.');
+    } catch (e) {
+      homebridge.toast.error('Failed to save configuration.');
+    }
   }
 
   function saveOnChange() {

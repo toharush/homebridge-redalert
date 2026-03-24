@@ -89,6 +89,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
 
     this.removeStaleAccessories(activeUUIDs);
     alertService.start();
+    this.log.info('Red Alert is running. You may close the config window.');
   }
 
   private parseCities(sensor: SensorConfig): string[] {
