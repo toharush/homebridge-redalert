@@ -82,7 +82,7 @@ describe('OrefClient', () => {
     await assert.rejects(() => client.fetchAlerts(), { message: 'network error' });
   });
 
-  it('should remap Event Ended (cat 10) to EventEnded category', async () => {
+  it('should remap Event Ended (cat 10 with event ended title) to cat 99', async () => {
     const eventEnded = { id: '2', cat: '10', title: EVENT_ENDED_TITLE, data: ['תל אביב'], desc: '' };
     globalThis.fetch = mockFetch(JSON.stringify([eventEnded])) as any;
     const result = await client.fetchAlerts();
@@ -94,5 +94,19 @@ describe('OrefClient', () => {
     globalThis.fetch = mockFetch(JSON.stringify([notice])) as any;
     const result = await client.fetchAlerts();
     assert.strictEqual(result[0].cat, '10');
+  });
+
+  it('should remap cat 10 with title containing event ended text', async () => {
+    const titles = [
+      `${EVENT_ENDED_TITLE} - חזרו לשגרה`,
+      `חזרו לשגרה - ${EVENT_ENDED_TITLE}`,
+      `חזרו לשגרה ${EVENT_ENDED_TITLE} - חזרה לשגרה`,
+    ];
+    for (const title of titles) {
+      const alert = { id: '4', cat: '10', title, data: ['תל אביב'], desc: '' };
+      globalThis.fetch = mockFetch(JSON.stringify([alert])) as any;
+      const result = await client.fetchAlerts();
+      assert.strictEqual(result[0].cat, String(OrefCategory.EventEnded), `title "${title}" should be remapped`);
+    }
   });
 });
