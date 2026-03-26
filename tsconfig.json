@@ -16,12 +16,14 @@
     "noImplicitAny": false,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-
+    "resolveJsonModule": true,
   },
   "include": [
     "src/"
   ],
   "exclude": [
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "**/*.mock.ts",
+    "**/*.mock.json"
   ]
 }
