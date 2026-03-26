@@ -31,33 +31,49 @@ function createMockHomekit() {
   } as any;
 }
 
-function createMockPlatformAccessory() {
-  let motionValue = false;
+function createMockPlatformAccessory(initialMotionValue = false) {
+  let motionValue = initialMotionValue;
   const infoService = {
-    setCharacteristic: mock.fn(function (this: any) { return this; }),
+    setCharacteristic: mock.fn(function (this: any) {
+      return this;
+    }),
   };
   const motionService = {
     getCharacteristic: mock.fn(() => ({ value: motionValue })),
-    updateCharacteristic: mock.fn((_char: any, value: boolean) => { motionValue = value; }),
+    updateCharacteristic: mock.fn((_char: any, value: boolean) => {
+      motionValue = value;
+    }),
   };
 
   return {
     accessory: {
       getService(type: any) {
-        if (type === 'AccessoryInformation') return infoService;
-        if (type === 'MotionSensor') return motionService;
+        if (type === 'AccessoryInformation') {
+          return infoService;
+        }
+        if (type === 'MotionSensor') {
+          return motionService;
+        }
         return null;
       },
-      addService() { return motionService; },
+      addService() {
+        return motionService;
+      },
     } as any,
     motionService,
     getMotionValue: () => motionValue,
+    /** Reset mock call counts — call after constructing MotionSensorAccessory to ignore init reset */
+    resetMocks() {
+      motionService.updateCharacteristic.mock.resetCalls();
+    },
   };
 }
 
 function activeState(cities: string[]): AlertState {
   const map = new Map<string, number>();
-  for (const city of cities) map.set(city, Date.now());
+  for (const city of cities) {
+    map.set(city, Date.now());
+  }
   return { isActive: true, activeCities: map };
 }
 
@@ -72,10 +88,58 @@ describe('MotionSensorAccessory', () => {
     log = createMockLogger();
   });
 
+  it('should reset stale state on construction', () => {
+    const { accessory, motionService } = createMockPlatformAccessory();
+    new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory);
+
+    assert.strictEqual(motionService.updateCharacteristic.mock.calls.length, 1);
+    assert.strictEqual(motionService.updateCharacteristic.mock.calls[0].arguments[1], false);
+  });
+
+  it('without constructor reset, stale ON state swallows the first alert', () => {
+    // Simulate Homebridge restart: HomeKit cached motionDetected = true from before
+    const { accessory, motionService, getMotionValue } = createMockPlatformAccessory(true);
+    const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory);
+
+    // Constructor reset sets motionValue to false — verify it happened
+    assert.strictEqual(getMotionValue(), false, 'constructor should have reset stale ON to OFF');
+
+    // Now simulate what would happen WITHOUT the reset:
+    // manually set motionValue back to true (as if the reset never ran)
+    motionService.updateCharacteristic('MotionDetected', true); // force stale ON
+    motionService.updateCharacteristic.mock.resetCalls();
+
+    // Send first active alert — updateAlertState checks `!current` before turning ON
+    sensor.updateAlertState(activeState(['תל אביב']));
+
+    // Because current is already true, the `!current` guard (line 46) blocks the ON update.
+    // The sensor silently ignores the first real alert — this is the bug the reset prevents.
+    assert.strictEqual(motionService.updateCharacteristic.mock.calls.length, 0,
+      'stale ON state causes first alert to be silently skipped');
+  });
+
+  it('with constructor reset, first alert after restart is properly detected', () => {
+    // Same scenario: HomeKit cached motionDetected = true from before restart
+    const { accessory, motionService, getMotionValue, resetMocks } = createMockPlatformAccessory(true);
+    const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory);
+
+    // Constructor reset cleared the stale state
+    assert.strictEqual(getMotionValue(), false);
+    resetMocks();
+
+    // First alert after restart — should trigger ON because current is now false
+    sensor.updateAlertState(activeState(['תל אביב']));
+
+    assert.strictEqual(motionService.updateCharacteristic.mock.calls.length, 1);
+    assert.strictEqual(motionService.updateCharacteristic.mock.calls[0].arguments[1], true,
+      'first alert after restart should turn sensor ON');
+  });
+
   describe('without turnoff delay', () => {
     it('should turn on when alert is active', () => {
-      const { accessory, motionService } = createMockPlatformAccessory();
+      const { accessory, motionService, resetMocks } = createMockPlatformAccessory();
       const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory);
+      resetMocks();
 
       sensor.updateAlertState(activeState(['תל אביב']));
 
@@ -84,8 +148,9 @@ describe('MotionSensorAccessory', () => {
     });
 
     it('should turn off immediately when alert clears', () => {
-      const { accessory, motionService } = createMockPlatformAccessory();
+      const { accessory, motionService, resetMocks } = createMockPlatformAccessory();
       const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory);
+      resetMocks();
 
       sensor.updateAlertState(activeState(['תל אביב']));
       sensor.updateAlertState(inactiveState());
@@ -95,8 +160,9 @@ describe('MotionSensorAccessory', () => {
     });
 
     it('should not update when state has not changed', () => {
-      const { accessory, motionService } = createMockPlatformAccessory();
+      const { accessory, motionService, resetMocks } = createMockPlatformAccessory();
       const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory);
+      resetMocks();
 
       sensor.updateAlertState(inactiveState());
 
@@ -104,8 +170,9 @@ describe('MotionSensorAccessory', () => {
     });
 
     it('should not update when already active and receiving active again', () => {
-      const { accessory, motionService } = createMockPlatformAccessory();
+      const { accessory, motionService, resetMocks } = createMockPlatformAccessory();
       const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory);
+      resetMocks();
 
       sensor.updateAlertState(activeState(['תל אביב']));
       sensor.updateAlertState(activeState(['תל אביב']));
@@ -118,13 +185,16 @@ describe('MotionSensorAccessory', () => {
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     afterEach(() => {
-      for (const t of timers) clearTimeout(t);
+      for (const t of timers) {
+        clearTimeout(t);
+      }
       timers.length = 0;
     });
 
     it('should not turn off immediately when alert clears', () => {
-      const { accessory, motionService, getMotionValue } = createMockPlatformAccessory();
+      const { accessory, motionService, getMotionValue, resetMocks } = createMockPlatformAccessory();
       const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory, 5000);
+      resetMocks();
 
       sensor.updateAlertState(activeState(['תל אביב']));
       sensor.updateAlertState(inactiveState());
@@ -135,8 +205,9 @@ describe('MotionSensorAccessory', () => {
     });
 
     it('should turn off after the delay expires', async () => {
-      const { accessory, motionService } = createMockPlatformAccessory();
+      const { accessory, motionService, resetMocks } = createMockPlatformAccessory();
       const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory, 50);
+      resetMocks();
 
       sensor.updateAlertState(activeState(['תל אביב']));
       sensor.updateAlertState(inactiveState());
@@ -150,8 +221,9 @@ describe('MotionSensorAccessory', () => {
     });
 
     it('should cancel delayed turn-off when new alert arrives', async () => {
-      const { accessory, motionService, getMotionValue } = createMockPlatformAccessory();
+      const { accessory, motionService, getMotionValue, resetMocks } = createMockPlatformAccessory();
       const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory, 50);
+      resetMocks();
 
       sensor.updateAlertState(activeState(['תל אביב']));
       sensor.updateAlertState(inactiveState());
@@ -168,8 +240,9 @@ describe('MotionSensorAccessory', () => {
     });
 
     it('should not start multiple timers for repeated inactive states', async () => {
-      const { accessory, motionService } = createMockPlatformAccessory();
+      const { accessory, motionService, resetMocks } = createMockPlatformAccessory();
       const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory, 50);
+      resetMocks();
 
       sensor.updateAlertState(activeState(['תל אביב']));
       sensor.updateAlertState(inactiveState());
@@ -206,8 +279,9 @@ describe('MotionSensorAccessory', () => {
     });
 
     it('should handle alert arriving exactly when turnoff delay expires', async () => {
-      const { accessory, motionService, getMotionValue } = createMockPlatformAccessory();
+      const { accessory, motionService, getMotionValue, resetMocks } = createMockPlatformAccessory();
       const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory, 50);
+      resetMocks();
 
       sensor.updateAlertState(activeState(['תל אביב']));
       sensor.updateAlertState(inactiveState());
@@ -225,8 +299,9 @@ describe('MotionSensorAccessory', () => {
     });
 
     it('should handle event ended then new alert then event ended during turnoff delay', async () => {
-      const { accessory, motionService, getMotionValue } = createMockPlatformAccessory();
+      const { accessory, motionService, getMotionValue, resetMocks } = createMockPlatformAccessory();
       const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory, 50);
+      resetMocks();
 
       // Alert ON
       sensor.updateAlertState(activeState(['תל אביב']));
@@ -249,8 +324,9 @@ describe('MotionSensorAccessory', () => {
     });
 
     it('should handle rapid ON/OFF/ON/OFF without waiting for timers', async () => {
-      const { accessory, motionService, getMotionValue } = createMockPlatformAccessory();
+      const { accessory, motionService, getMotionValue, resetMocks } = createMockPlatformAccessory();
       const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory, 50);
+      resetMocks();
 
       // Rapid toggles without waiting
       sensor.updateAlertState(activeState(['תל אביב']));
@@ -272,8 +348,9 @@ describe('MotionSensorAccessory', () => {
     });
 
     it('should handle full cycle: on -> delayed off -> on -> delayed off', async () => {
-      const { accessory, motionService } = createMockPlatformAccessory();
+      const { accessory, motionService, resetMocks } = createMockPlatformAccessory();
       const sensor = new MotionSensorAccessory(log, 'Test', createMockHomekit(), accessory, 30);
+      resetMocks();
 
       // First cycle
       sensor.updateAlertState(activeState(['תל אביב']));

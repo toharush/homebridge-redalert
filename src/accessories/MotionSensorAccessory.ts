@@ -30,6 +30,8 @@ export class MotionSensorAccessory implements AlertAccessory {
     this.service =
       accessory.getService(homekit.Service.MotionSensor) ||
       accessory.addService(homekit.Service.MotionSensor, name, 'alerts');
+
+    this.service.updateCharacteristic(this.motionDetected, false);
   }
 
   updateAlertState(state: AlertState): void {

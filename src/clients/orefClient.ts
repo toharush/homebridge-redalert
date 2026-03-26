@@ -16,7 +16,7 @@ export class OrefClient implements AlertClient {
     });
 
     const raw = await res.text();
-    const cleaned = _.trim(raw.replace(/^\uFEFF/, ''));
+    const cleaned = _(raw).replace(/^\uFEFF/, '').trim();
 
     if (_.isEmpty(cleaned)) {
       return [];
