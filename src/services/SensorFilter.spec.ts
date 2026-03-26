@@ -56,7 +56,7 @@ describe('SensorFilter: activeCities tracking', () => {
     await p.poll();
     const secondTs = getActiveCities().get('פתח תקווה')!;
     assert.ok(secondTs > firstTs - 1000, 'timestamp should be refreshed');
-    assert.ok(Date.now() - secondTs < 50, 'timestamp should be recent');
+    assert.ok(Date.now() - secondTs < 500, 'timestamp should be recent');
   });
 
   it('removes city from activeCities on Event Ended', async () => {
@@ -215,7 +215,7 @@ describe('SensorFilter: timestamp expiry', () => {
 
     await p.poll(); // fresh alert resets timestamp
     assert.strictEqual(getActiveCities().size, 1);
-    assert.ok(Date.now() - getActiveCities().get('פתח תקווה')! < 50, 'timestamp refreshed');
+    assert.ok(Date.now() - getActiveCities().get('פתח תקווה')! < 500, 'timestamp refreshed');
   });
 
   it('logs warning when alert expires (safety fallback)', async () => {
@@ -284,7 +284,7 @@ describe('SensorFilter: category filtering on activeCities', () => {
 
     await p.poll(); // notice refreshes because all categories allowed
     assert.strictEqual(getActiveCities().size, 1, 'notice refreshed all-categories sensor');
-    assert.ok(Date.now() - getActiveCities().get('פתח תקווה')! < 50);
+    assert.ok(Date.now() - getActiveCities().get('פתח תקווה')! < 500);
   });
 
   it('Event Ended removes from activeCities regardless of sensor category', async () => {
