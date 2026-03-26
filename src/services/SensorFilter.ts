@@ -2,12 +2,58 @@ import _ from 'lodash';
 import { OrefRealtimeAlert, AlertState, OrefCategory } from '../types';
 import { DebugLogger } from '../utils/debugLogger';
 
+export interface CityAlert {
+  categoryId: number;
+  title: string;
+}
+
+export interface ParsedAlerts {
+  endedCities: Set<string>;
+  relevantCities: Map<string, CityAlert[]>;
+}
+
 export interface AlertListener {
-  handleAlerts(alerts: OrefRealtimeAlert[]): void;
+  handleAlerts(parsed: ParsedAlerts): void;
 }
 
 export interface AlertAccessory {
   updateAlertState(state: AlertState): void;
+}
+
+export function parseAlerts(alerts: OrefRealtimeAlert[]): ParsedAlerts {
+  const endedCities = new Set<string>();
+  const relevantCities = new Map<string, CityAlert[]>();
+
+  _.forEach(
+    alerts,
+    (alert) => {
+      const categoryId = _.toInteger(alert.cat);
+      if (categoryId === OrefCategory.EventEnded) {
+        _.forEach(
+          alert.data,
+          (city) => {
+            if (city) {
+              endedCities.add(city);
+            }
+          });
+      } else if (categoryId > 0) {
+        const entry: CityAlert = { categoryId, title: alert.title };
+        _.forEach(
+          alert.data,
+          (city) => {
+            if (city) {
+              const existing = relevantCities.get(city);
+              if (existing) {
+                existing.push(entry);
+              } else {
+                relevantCities.set(city, [entry]);
+              }
+            }
+          });
+      }
+    });
+
+  return { endedCities, relevantCities };
 }
 
 export class SensorFilter implements AlertListener {
@@ -28,35 +74,26 @@ export class SensorFilter implements AlertListener {
     this.maxActiveAgeMs = alertTimeoutMs;
   }
 
-  handleAlerts(alerts: OrefRealtimeAlert[]): void {
-    const isEventEnded = (alert: OrefRealtimeAlert) => _.toInteger(alert.cat) === OrefCategory.EventEnded;
+  handleAlerts(parsed: ParsedAlerts): void {
+    const { endedCities, relevantCities } = parsed;
 
-    const endedAlerts = _.filter(alerts, isEventEnded);
-    const relevantAlerts = _.filter(alerts, (alert) => {
-      const categoryId = _.toInteger(alert.cat);
-      return categoryId > 0 && !isEventEnded(alert) && this.allowedCategories.has(categoryId);
-    });
-
-    _(endedAlerts)
-      .flatMap((alert) => alert.data)
-      .forEach((city) => {
-        const matched = this.findConfiguredCity(city);
-        if (matched && this.activeCities.delete(matched)) {
-          this.log.info(`[${this.name}] Event ended: ${matched}`);
+    this.citySet.forEach(
+      (configured) => {
+        if (this.findMatchInSet(configured, endedCities) && this.activeCities.delete(configured)) {
+          this.log.info(`[${this.name}] Event ended: ${configured}`);
         }
       });
 
-    _(relevantAlerts)
-      .flatMap((alert) => _.map(alert.data, (city) => ({ city, title: alert.title })))
-      .forEach(({ city, title }) => {
-        const matched = this.findConfiguredCity(city);
-        if (!matched) {
+    this.citySet.forEach(
+      (configured) => {
+        const title = this.findMatchingAlert(configured, relevantCities);
+        if (!title) {
           return;
         }
-        const isNew = !this.activeCities.has(matched);
-        this.activeCities.set(matched, Date.now());
+        const isNew = !this.activeCities.has(configured);
+        this.activeCities.set(configured, Date.now());
         if (isNew) {
-          this.log.info(`[${this.name}] ALERT: ${title} - ${city}`);
+          this.log.info(`[${this.name}] ALERT: ${title} - ${configured}`);
         }
       });
 
@@ -64,19 +101,47 @@ export class SensorFilter implements AlertListener {
     this.broadcastState();
   }
 
-  private findConfiguredCity(alertCity: string): string | undefined {
-    if (!alertCity) {
-      return undefined;
+  private findMatchInSet(configured: string, alertCities: Set<string>): boolean {
+    if (alertCities.has(configured)) {
+      return true;
     }
-    if (this.citySet.has(alertCity)) {
-      return alertCity;
+    if (!this.prefixMatching) {
+      return false;
+    }
+    for (const alertCity of alertCities) {
+      if (_.startsWith(alertCity, configured) || _.startsWith(configured, alertCity)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private findMatchingAlert(configured: string, relevantCities: Map<string, CityAlert[]>): string | undefined {
+    const tryMatch = (entries: CityAlert[] | undefined): string | undefined => {
+      if (!entries) {
+        return undefined;
+      }
+      for (const { categoryId, title } of entries) {
+        if (this.allowedCategories.has(categoryId)) {
+          return title;
+        }
+      }
+      return undefined;
+    };
+
+    const exact = tryMatch(relevantCities.get(configured));
+    if (exact) {
+      return exact;
     }
     if (!this.prefixMatching) {
       return undefined;
     }
-    for (const configured of this.citySet) {
+    for (const [alertCity, entries] of relevantCities) {
       if (_.startsWith(alertCity, configured) || _.startsWith(configured, alertCity)) {
-        return configured;
+        const match = tryMatch(entries);
+        if (match) {
+          return match;
+        }
       }
     }
     return undefined;

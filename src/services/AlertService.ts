@@ -2,7 +2,7 @@ import _ from 'lodash';
 import { OrefRealtimeAlert } from '../types';
 import { DebugLogger } from '../utils/debugLogger';
 import { AlertClient } from '../clients/orefClient';
-import { AlertListener } from './SensorFilter';
+import { AlertListener, parseAlerts } from './SensorFilter';
 
 export class AlertService {
   private readonly listeners: AlertListener[] = [];
@@ -69,8 +69,9 @@ export class AlertService {
       this.log.easyDebug(() => `Raw alerts: ${JSON.stringify(alerts)}`);
     }
 
+    const parsed = parseAlerts(alerts);
     for (const listener of this.listeners) {
-      listener.handleAlerts(alerts);
+      listener.handleAlerts(parsed);
     }
   }
 }

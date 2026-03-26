@@ -7,6 +7,7 @@ export interface OrefRealtimeAlert {
 }
 
 export const EVENT_ENDED_TITLE = 'האירוע הסתיים';
+export const EVENT_ENDED_PATTERN = new RegExp(EVENT_ENDED_TITLE);
 
 export enum OrefCategory {
   Rockets = 1,
@@ -19,6 +20,6 @@ export enum OrefCategory {
   Warning = 8,
   HeadsUpNotice = 10,
   TerroristInfiltration = 13,
-  /** Synthetic category — OREF sends Event Ended as cat 10, we remap it in OrefClient. */
+  /** Synthetic category — OREF sends Event Ended as cat 10, we remap it in parseAlerts. */
   EventEnded = 99,
 }

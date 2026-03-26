@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { OrefRealtimeAlert, OrefCategory, EVENT_ENDED_TITLE } from '../types';
+import { OrefRealtimeAlert, OrefCategory, EVENT_ENDED_PATTERN } from '../types';
 import { OREF_ALERTS_URL, OREF_HEADERS } from '../settings';
 
 export interface AlertClient {
@@ -25,10 +25,13 @@ export class OrefClient implements AlertClient {
     try {
       const parsed = JSON.parse(cleaned);
       const alerts: OrefRealtimeAlert[] = _.isArray(parsed) ? parsed : [parsed];
-      return _.map(alerts, (alert) =>
-        alert.cat === String(OrefCategory.HeadsUpNotice) && _.includes(alert.title, EVENT_ENDED_TITLE)
-          ? { ...alert, cat: String(OrefCategory.EventEnded) }
-          : alert,
+      return _.map(
+        alerts,
+        (alert) =>
+          _.toInteger(alert.cat) === OrefCategory.HeadsUpNotice &&
+          EVENT_ENDED_PATTERN.test(alert.title)
+            ? { ...alert, cat: String(OrefCategory.EventEnded) }
+            : alert,
       );
     } catch {
       return [];
