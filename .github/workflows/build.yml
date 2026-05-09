@@ -6,13 +6,45 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
+  update-lockfile:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          registry-url: https://registry.npmjs.org/
+
+      - run: npm install
+
+      - name: Commit updated package-lock.json
+        run: |
+          if git diff --quiet package-lock.json 2>/dev/null; then
+            echo "No lockfile changes"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "chore: update package-lock.json"
+            git push
+          fi
+
   build-node-20:
+    needs: [update-lockfile]
+    if: always()
     uses: ./.github/workflows/ci.yml
     with:
       node-version: '20'
 
   build-node-22:
+    needs: [update-lockfile]
+    if: always()
     uses: ./.github/workflows/ci.yml
     with:
       node-version: '22'
