@@ -12,3 +12,4 @@ export const DEFAULT_POLLING_INTERVAL = 1000; // ms
 export const DEFAULT_ALERT_TIMEOUT = 1800000; // 30 minutes in ms
 export const DEFAULT_REQUEST_TIMEOUT = 3000; // ms
 export const DEFAULT_TURNOFF_DELAY = 0; // ms
+export const DEFAULT_HEALTH_CHECK_THRESHOLD = 5; // consecutive failures before unhealthy

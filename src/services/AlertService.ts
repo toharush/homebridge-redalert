@@ -9,12 +9,21 @@ export class AlertService {
 
   private polling = false;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  private consecutiveFailures = 0;
+  private healthy = true;
+
+  private healthCallback: ((healthy: boolean) => void) | null = null;
 
   constructor(
     private readonly log: DebugLogger,
     private readonly client: AlertClient,
     private readonly pollingInterval: number,
+    private readonly failureThreshold: number,
   ) {}
+
+  set onHealthChange(cb: (healthy: boolean) => void) {
+    this.healthCallback = cb;
+  }
 
   registerListener(listener: AlertListener): void {
     this.listeners.push(listener);
@@ -50,10 +59,27 @@ export class AlertService {
           this.log.warn(`Slow API response: ${elapsed}ms`);
         }
         this.broadcast(alerts);
+        if (!this.healthy) {
+          this.healthy = true;
+          this.consecutiveFailures = 0;
+          this.client.useNormalTimeout?.();
+          this.healthCallback?.(true);
+        } else if (this.consecutiveFailures > 0) {
+          this.consecutiveFailures = 0;
+          this.client.useNormalTimeout?.();
+        }
       })
       .catch((err: Error) => {
         if (err.name === 'AbortError') {
           return;
+        }
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures === 1) {
+          this.client.useRetryTimeout?.();
+        }
+        if (this.healthy && this.consecutiveFailures >= this.failureThreshold) {
+          this.healthy = false;
+          this.healthCallback?.(false);
         }
         this.log.error(`Failed to fetch alerts (${Date.now() - start}ms): ${err}`);
       })

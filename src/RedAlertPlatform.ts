@@ -2,6 +2,7 @@ import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, 
 import {
   PLATFORM_NAME, PLUGIN_NAME, DEFAULT_POLLING_INTERVAL,
   DEFAULT_ALERT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, DEFAULT_TURNOFF_DELAY,
+  DEFAULT_HEALTH_CHECK_THRESHOLD,
 } from './settings';
 import _ from 'lodash';
 import { CATEGORY_MAP, ALL_CATEGORY_KEYS, SensorConfig } from './types';
@@ -11,6 +12,7 @@ import { AlertService } from './services/AlertService';
 import { SensorFilter } from './services/SensorFilter';
 import { OrefClient } from './clients/orefClient';
 import { MotionSensorAccessory } from './accessories/MotionSensorAccessory';
+import { HealthCheckAccessory } from './accessories/HealthCheckAccessory';
 import { migrateConfig } from './utils/migrationHelper';
 
 export class RedAlertPlatform implements DynamicPlatformPlugin {
@@ -19,6 +21,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
   public readonly log: DebugLogger;
 
   private readonly cachedAccessories: Map<string, PlatformAccessory> = new Map();
+  private readonly sensorAccessories: MotionSensorAccessory[] = [];
   private alertService: AlertService | null = null;
 
   constructor(
@@ -41,7 +44,10 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     const requestTimeout = _.get(config, 'request_timeout', DEFAULT_REQUEST_TIMEOUT);
     const globalAlertTimeout = _.get(config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT);
     const turnoffDelay = _.get(config, 'turnoff_delay', DEFAULT_TURNOFF_DELAY);
-    this.alertService = new AlertService(this.log, new OrefClient(requestTimeout), pollingInterval);
+    const healthCheckThreshold = _.get(config, 'health_check_threshold', DEFAULT_HEALTH_CHECK_THRESHOLD);
+    this.alertService = new AlertService(
+      this.log, new OrefClient(requestTimeout, this.log), pollingInterval, healthCheckThreshold,
+    );
 
     this.log.easyDebug(`Finished initializing platform: ${PLATFORM_NAME}`);
 
@@ -49,10 +55,15 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       this.log.easyDebug('Executed didFinishLaunching callback');
       this.discoverDevices(this.alertService!, validated.sensors, globalAlertTimeout, turnoffDelay);
     });
+
+    this.api.on('shutdown', () => this.shutdown());
   }
 
   shutdown() {
     this.alertService?.stop();
+    for (const accessory of this.sensorAccessories) {
+      accessory.destroy();
+    }
   }
 
   configureAccessory(accessory: PlatformAccessory) {
@@ -76,6 +87,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       activeUUIDs.add(accessory.UUID);
 
       const sensorAccessory = new MotionSensorAccessory(this.log, sensor.name, this, accessory, turnoffDelay);
+      this.sensorAccessories.push(sensorAccessory);
       const filter = new SensorFilter(
         sensor.name, this.log, sensorAccessory, cities,
         allowedCategories, globalAlertTimeout, prefixMatching,
@@ -85,6 +97,14 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       this.log.info(
         `[${sensor.name}] Monitoring ${cities.length} cities, ${allowedCategories.size} category IDs, prefix=${prefixMatching}`,
       );
+    }
+
+    if (_.get(this.config, 'health_check', false)) {
+      const healthAccessory = this.resolveAccessory('Red Alert Health');
+      activeUUIDs.add(healthAccessory.UUID);
+      const healthCheck = new HealthCheckAccessory(this.log, this, healthAccessory);
+      alertService.onHealthChange = (healthy) => healthCheck.updateHealth(healthy);
+      this.log.info('Health check sensor enabled');
     }
 
     this.removeStaleAccessories(activeUUIDs);
@@ -101,6 +121,10 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
 
   private resolveCategories(sensor: SensorConfig): Set<number> {
     const keys = sensor.categories?.length ? sensor.categories : ALL_CATEGORY_KEYS;
+    const invalid = keys.filter((key) => !(key in CATEGORY_MAP));
+    if (invalid.length > 0) {
+      this.log.warn(`[${sensor.name}] Unknown categories: ${invalid.join(', ')} — these will be ignored`);
+    }
     return new Set(_.flatMap(keys, (key) => CATEGORY_MAP[key] || []));
   }
 
@@ -120,6 +144,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       if (!activeUUIDs.has(uuid)) {
         this.log.info(`Removing stale accessory: ${stale.displayName}`);
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [stale]);
+        this.cachedAccessories.delete(uuid);
       }
     }
   }

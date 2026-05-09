@@ -15,7 +15,7 @@ import {
   mockFetchSequence,
   TestPipeline,
 } from './SensorFilter.mock';
-import { DEFAULT_ALERT_TIMEOUT } from '../settings';
+import { DEFAULT_ALERT_TIMEOUT, DEFAULT_HEALTH_CHECK_THRESHOLD } from '../settings';
 
 describe('alert lifecycle', () => {
   afterEach(() => {
@@ -760,6 +760,7 @@ describe('edge cases', () => {
 
   it('OrefClient handles BOM prefix in response', async () => {
     globalThis.fetch = mock.fn(() => Promise.resolve({
+      ok: true,
       text: () => Promise.resolve('\uFEFF' + JSON.stringify([makeAlert(OrefCategory.Rockets, ['תל אביב'])])),
       status: 200,
     })) as any;
@@ -777,6 +778,7 @@ describe('edge cases', () => {
 
   it('OrefClient returns empty for malformed JSON', async () => {
     globalThis.fetch = mock.fn(() => Promise.resolve({
+      ok: true,
       text: () => Promise.resolve('not valid json{{{'),
       status: 200,
     })) as any;
@@ -938,7 +940,7 @@ describe('AlertService async polling', () => {
     ]);
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 30);
+    const service = new AlertService(log, client, 30, DEFAULT_HEALTH_CHECK_THRESHOLD);
     const sensor = createMockAccessory();
     service.registerListener(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
 
@@ -959,6 +961,7 @@ describe('AlertService async polling', () => {
         return Promise.reject(new Error('temporary failure'));
       }
       return Promise.resolve({
+        ok: true,
         text: () => Promise.resolve(JSON.stringify([makeAlert(OrefCategory.Rockets, ['תל אביב'])])),
         status: 200,
       });
@@ -966,7 +969,7 @@ describe('AlertService async polling', () => {
 
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 10);
+    const service = new AlertService(log, client, 10, DEFAULT_HEALTH_CHECK_THRESHOLD);
     const sensor = createMockAccessory();
     service.registerListener(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
 
@@ -987,7 +990,7 @@ describe('AlertService async polling', () => {
 
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 30);
+    const service = new AlertService(log, client, 30, DEFAULT_HEALTH_CHECK_THRESHOLD);
     const sensor = createMockAccessory();
     service.registerListener(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
 
@@ -1003,7 +1006,7 @@ describe('AlertService async polling', () => {
 
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 30);
+    const service = new AlertService(log, client, 30, DEFAULT_HEALTH_CHECK_THRESHOLD);
     const sensor = createMockAccessory();
     service.registerListener(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
 
@@ -1030,7 +1033,7 @@ describe('AlertService async polling', () => {
     const getCalls = mockFetchSequence([alerts, alerts, alerts, alerts, alerts]);
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 10);
+    const service = new AlertService(log, client, 10, DEFAULT_HEALTH_CHECK_THRESHOLD);
     const sensor = createMockAccessory();
     service.registerListener(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
 
@@ -1109,6 +1112,128 @@ describe('getCategoryName', () => {
     await p.poll();
 
     assert.strictEqual(getCategoryName(999), 'unknown');
+  });
+});
+
+describe('health tracking', () => {
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('fires onHealthChange(false) after consecutive failure threshold', async () => {
+    globalThis.fetch = mock.fn(() => Promise.reject(new Error('fail'))) as any;
+
+    const client = new OrefClient(3000);
+    const log = createMockLogger();
+    const service = new AlertService(log, client, 10, 3);
+    const healthChanges: boolean[] = [];
+    service.onHealthChange = (h) => healthChanges.push(h);
+
+    service.start();
+    await new Promise((r) => setTimeout(r, 150));
+    service.stop();
+
+    assert.ok(healthChanges.includes(false), 'should report unhealthy');
+    assert.strictEqual(healthChanges.filter((h) => h === false).length, 1, 'should only fire once');
+  });
+
+  it('fires onHealthChange(true) when recovering after failures', async () => {
+    let callCount = 0;
+    globalThis.fetch = mock.fn(() => {
+      callCount++;
+      if (callCount <= 3) {
+        return Promise.reject(new Error('fail'));
+      }
+      return Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve(''),
+        status: 200,
+      });
+    }) as any;
+
+    const client = new OrefClient(3000);
+    const log = createMockLogger();
+    const service = new AlertService(log, client, 10, 3);
+    const healthChanges: boolean[] = [];
+    service.onHealthChange = (h) => healthChanges.push(h);
+
+    service.start();
+    await new Promise((r) => setTimeout(r, 200));
+    service.stop();
+
+    assert.deepStrictEqual(healthChanges, [false, true]);
+  });
+
+  it('does not fire onHealthChange if failures stay below threshold', async () => {
+    let callCount = 0;
+    globalThis.fetch = mock.fn(() => {
+      callCount++;
+      if (callCount <= 2) {
+        return Promise.reject(new Error('fail'));
+      }
+      return Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve(''),
+        status: 200,
+      });
+    }) as any;
+
+    const client = new OrefClient(3000);
+    const log = createMockLogger();
+    const service = new AlertService(log, client, 10, 5);
+    const healthChanges: boolean[] = [];
+    service.onHealthChange = (h) => healthChanges.push(h);
+
+    service.start();
+    await new Promise((r) => setTimeout(r, 200));
+    service.stop();
+
+    assert.strictEqual(healthChanges.length, 0, 'should not fire — failures below threshold');
+  });
+
+  it('resets failure count on success and requires full threshold again', async () => {
+    let callCount = 0;
+    // Pattern: 2 failures, 1 success, 2 failures — never hits threshold of 3
+    globalThis.fetch = mock.fn(() => {
+      callCount++;
+      const cycle = ((callCount - 1) % 3);
+      if (cycle < 2) {
+        return Promise.reject(new Error('fail'));
+      }
+      return Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve(''),
+        status: 200,
+      });
+    }) as any;
+
+    const client = new OrefClient(3000);
+    const log = createMockLogger();
+    const service = new AlertService(log, client, 10, 3);
+    const healthChanges: boolean[] = [];
+    service.onHealthChange = (h) => healthChanges.push(h);
+
+    service.start();
+    await new Promise((r) => setTimeout(r, 200));
+    service.stop();
+
+    assert.strictEqual(healthChanges.length, 0, 'never hits 3 consecutive failures');
+  });
+
+  it('does not fire onHealthChange when no callback is set', async () => {
+    globalThis.fetch = mock.fn(() => Promise.reject(new Error('fail'))) as any;
+
+    const client = new OrefClient(3000);
+    const log = createMockLogger();
+    const service = new AlertService(log, client, 10, 3);
+    // onHealthChange is null by default — should not throw
+
+    service.start();
+    await new Promise((r) => setTimeout(r, 150));
+    service.stop();
+
+    // If we got here without throwing, the test passes
+    assert.ok(true);
   });
 });
 

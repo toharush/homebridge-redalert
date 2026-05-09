@@ -3,7 +3,7 @@ import { CATEGORY_MAP, OrefRealtimeAlert, AlertState } from '../types';
 import { OrefClient } from '../clients/orefClient';
 import { AlertService } from './AlertService';
 import { SensorFilter, AlertAccessory, parseAlerts } from './SensorFilter';
-import { DEFAULT_ALERT_TIMEOUT } from '../settings';
+import { DEFAULT_ALERT_TIMEOUT, DEFAULT_HEALTH_CHECK_THRESHOLD } from '../settings';
 
 // Re-export everything from orefClient.mock so consumers go through this layer
 export {
@@ -65,6 +65,7 @@ export function mockFetchSequence(sequence: OrefRealtimeAlert[][]): (() => numbe
     const body = callIndex < jsonBodies.length ? jsonBodies[callIndex] : '';
     callIndex++;
     return Promise.resolve({
+      ok: true,
       text: () => Promise.resolve(body),
       status: 200,
     });
@@ -140,7 +141,7 @@ export class TestPipeline {
 
   /** Real AlertService polling through OrefClient */
   async runService(opts?: { pollInterval?: number; waitMs?: number }): Promise<void> {
-    const service = new AlertService(this.log, this.client, opts?.pollInterval ?? 10);
+    const service = new AlertService(this.log, this.client, opts?.pollInterval ?? 10, DEFAULT_HEALTH_CHECK_THRESHOLD);
     for (const f of this._filters) {
       service.registerListener(f);
     }

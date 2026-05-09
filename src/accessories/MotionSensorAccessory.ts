@@ -34,6 +34,13 @@ export class MotionSensorAccessory implements AlertAccessory {
     this.service.updateCharacteristic(this.motionDetected, false);
   }
 
+  destroy(): void {
+    if (this.turnoffTimer) {
+      clearTimeout(this.turnoffTimer);
+      this.turnoffTimer = undefined;
+    }
+  }
+
   updateAlertState(state: AlertState): void {
     const current = this.service.getCharacteristic(this.motionDetected).value as boolean;
 

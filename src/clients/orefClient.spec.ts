@@ -11,6 +11,7 @@ import {
 
 function mockFetch(body: string, status = 200) {
   return mock.fn(() => Promise.resolve({
+    ok: status >= 200 && status < 300,
     text: () => Promise.resolve(body),
     status,
   }));
@@ -71,6 +72,12 @@ describe('OrefClient', () => {
 
   it('should return empty array for malformed JSON', async () => {
     globalThis.fetch = mockFetch('not valid json{{{') as any;
+    const result = await client.fetchAlerts();
+    assert.deepStrictEqual(result, []);
+  });
+
+  it('should return empty array for non-ok HTTP status', async () => {
+    globalThis.fetch = mockFetch('<html>Server Error</html>', 500) as any;
     const result = await client.fetchAlerts();
     assert.deepStrictEqual(result, []);
   });

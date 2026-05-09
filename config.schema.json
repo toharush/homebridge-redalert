@@ -111,6 +111,20 @@
         "minimum": 1000,
         "maximum": 10000
       },
+      "health_check": {
+        "title": "Enable Health Check Sensor",
+        "description": "Adds a Contact Sensor to HomeKit that reports whether the OREF API is reachable.",
+        "type": "boolean",
+        "default": false
+      },
+      "health_check_threshold": {
+        "title": "Health Check Threshold",
+        "description": "Number of consecutive failed requests before the health sensor reports unhealthy.",
+        "type": "number",
+        "default": 5,
+        "minimum": 2,
+        "maximum": 30
+      },
       "debug": {
         "title": "Enable Debug Logs",
         "description": "When checked, the plugin will produce extra logs for debugging purposes.",
@@ -141,6 +155,8 @@
         "alert_timeout",
         "polling_interval",
         "request_timeout",
+        "health_check",
+        "health_check_threshold",
         "debug"
       ]
     }
