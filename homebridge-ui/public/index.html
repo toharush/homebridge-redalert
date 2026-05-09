@@ -64,6 +64,15 @@
       <div class="help-text">API response timeout. Default: 3000.</div>
     </div>
     <div class="field-group">
+      <label><input type="checkbox" id="health_check"> Enable Health Check Switch</label>
+      <div class="help-text">Adds a Switch to HomeKit that turns OFF when the OREF API is unreachable.</div>
+    </div>
+    <div class="field-group">
+      <label>Health Check Threshold</label>
+      <input type="number" id="health_check_threshold" min="2" max="30" value="5">
+      <div class="help-text">Consecutive failures before reporting unhealthy. Default: 5.</div>
+    </div>
+    <div class="field-group">
       <label><input type="checkbox" id="debug"> Enable Debug Logs</label>
     </div>
   </div>
@@ -110,6 +119,8 @@
     document.getElementById('alert_timeout').value = config.alert_timeout ?? 1800000;
     document.getElementById('polling_interval').value = config.polling_interval ?? 1000;
     document.getElementById('request_timeout').value = config.request_timeout ?? 3000;
+    document.getElementById('health_check').checked = config.health_check ?? false;
+    document.getElementById('health_check_threshold').value = config.health_check_threshold ?? 5;
     document.getElementById('debug').checked = config.debug ?? false;
 
     if (!sensors.length) {
@@ -250,6 +261,8 @@
       alert_timeout: parseInt(document.getElementById('alert_timeout').value) || 1800000,
       polling_interval: parseInt(document.getElementById('polling_interval').value) || 1000,
       request_timeout: parseInt(document.getElementById('request_timeout').value) || 3000,
+      health_check: document.getElementById('health_check').checked,
+      health_check_threshold: parseInt(document.getElementById('health_check_threshold').value) || 5,
       debug: document.getElementById('debug').checked,
     };
   }
