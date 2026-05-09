@@ -27,7 +27,9 @@ export class HealthCheckAccessory {
       accessory.addService(homekit.Service.Switch, 'API Health', 'health-check');
 
     this.service.getCharacteristic(this.on)
-      .onSet(() => undefined);
+      .onSet(() => {
+        throw new Error('Read-only');
+      });
 
     this.service.updateCharacteristic(this.on, true);
   }
