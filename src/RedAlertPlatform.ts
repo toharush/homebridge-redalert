@@ -50,10 +50,15 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     const globalAlertTimeout = _.get(config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT);
     const turnoffDelay = _.get(config, 'turnoff_delay', DEFAULT_TURNOFF_DELAY);
     const healthCheckThreshold = _.get(config, 'health_check_threshold', DEFAULT_HEALTH_CHECK_THRESHOLD);
+    const reconnectInterval = _.get(config, 'reconnect_interval', 10000);
+    const maxReconnectInterval = _.get(config, 'max_reconnect_interval', 60000);
+    const pingInterval = _.get(config, 'ping_interval', 60000);
+    const pongTimeout = _.get(config, 'pong_timeout', 420000);
     const customSources: any[] = _.get(config, 'custom_sources', []);
 
     this.pipeline = this.buildPipeline(
       pollingInterval, requestTimeout, healthCheckThreshold, customSources,
+      { reconnectInterval, maxReconnectInterval, pingInterval, pongTimeout },
     );
 
     this.log.easyDebug(`Finished initializing platform: ${PLATFORM_NAME}`);
@@ -129,13 +134,12 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     requestTimeout: number,
     healthCheckThreshold: number,
     customSources: any[],
+    ws: { reconnectInterval: number; maxReconnectInterval: number; pingInterval: number; pongTimeout: number },
   ): AlertPipeline {
     const pipeline = new AlertPipeline(this.log);
 
-    // Pipeline stages
     pipeline.addStage(new DeduplicationStage());
 
-    // Built-in: Oref HTTP polling
     const orefClient = new OrefClient(requestTimeout, this.log);
     pipeline.addSource(new HttpSource(this.log, {
       name: 'Pikud HaOref',
@@ -147,20 +151,18 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       adaptiveTimeout: true,
     }));
 
-    // Built-in: Tzofar WebSocket (alerts + early warnings + exit notifications)
     pipeline.addSource(new WebSocketSource(this.log, {
       name: 'Tzofar',
       url: TZOFAR_WS_URL,
       headers: tzofarHeaders(),
-      reconnectInterval: 10000,
-      maxReconnectInterval: 60000,
+      reconnectInterval: ws.reconnectInterval,
+      maxReconnectInterval: ws.maxReconnectInterval,
       failureThreshold: healthCheckThreshold,
-      pingInterval: 60000,
-      pongTimeout: 420000,
+      pingInterval: ws.pingInterval,
+      pongTimeout: ws.pongTimeout,
       parseFn: parseTzofarMessage,
     }));
 
-    // User-configured add-on sources
     for (const src of customSources) {
       const mapping: CategoryMapping = src.category_mapping ?? {};
       if (src.type === 'http') {
@@ -180,13 +182,13 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
           name: src.name ?? 'custom-ws',
           url: src.url,
           headers: src.headers,
-          reconnectInterval: src.reconnect_interval ?? 10000,
-          maxReconnectInterval: src.max_reconnect_interval ?? 60000,
+          reconnectInterval: src.reconnect_interval ?? ws.reconnectInterval,
+          maxReconnectInterval: src.max_reconnect_interval ?? ws.maxReconnectInterval,
           failureThreshold: src.failure_threshold ?? healthCheckThreshold,
           categoryMapping: mapping,
           responseFormat: src.response_format,
-          pingInterval: src.ping_interval ?? 60000,
-          pongTimeout: src.pong_timeout ?? 420000,
+          pingInterval: src.ping_interval ?? ws.pingInterval,
+          pongTimeout: src.pong_timeout ?? ws.pongTimeout,
           messageType: src.message_type,
           messageDataField: src.message_data_field,
         };

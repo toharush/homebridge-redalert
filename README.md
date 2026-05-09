@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  Polls the official Pikud HaOref API directly — no Telegram, no middleman, no authentication required.
+  Multi-source alert pipeline — Pikud HaOref HTTP + Tzofar WebSocket built-in, with support for custom add-on sources. No Telegram, no middleman, no authentication required.
 </p>
 
 ---
@@ -31,12 +31,47 @@
 ## How It Works
 
 1. The plugin creates one **motion sensor** per configured sensor in HomeKit.
-2. A single poller fetches the Pikud HaOref API every second (configurable) — adding sensors does **not** add API calls.
-3. Each sensor independently filters alerts by its own cities and categories.
-4. When an alert matches, the sensor turns **ON**.
-5. The sensor stays **ON** until Pikud HaOref sends an "Event Ended" message for your city.
-6. If "Event Ended" is never received, the alert auto-clears after the configured timeout (default: 30 min).
+2. An **alert pipeline** ingests alerts from multiple sources simultaneously — **Pikud HaOref** (HTTP polling) and **Tzofar** (WebSocket push) are built-in. Custom sources can be added.
+3. Alerts pass through a **deduplication stage** so duplicate alerts from different sources are only processed once.
+4. Each sensor independently filters alerts by its own cities and categories.
+5. When an alert matches, the sensor turns **ON**. Nationwide alerts (`רחבי הארץ`) activate all configured cities.
+6. The sensor stays **ON** until an "Event Ended" message is received, or the alert auto-clears after the configured timeout (default: 30 min).
 7. Create HomeKit automations based on each motion sensor (e.g. flash lights, play a sound, send a notification).
+
+---
+
+## Architecture
+
+```
+┌────────────────┐  ┌──────────────────┐  ┌─────────────────┐
+│  Pikud HaOref  │  │     Tzofar       │  │  Custom Source   │
+│  (HTTP poll)   │  │  (WebSocket)     │  │  (HTTP / WS)    │
+└───────┬────────┘  └────────┬─────────┘  └───────┬─────────┘
+        │                    │                     │
+        └────────────┬───────┴─────────────────────┘
+                     ▼
+            ┌─────────────────┐
+            │  AlertPipeline  │
+            │  (dedup + fan-  │
+            │   out to all    │
+            │   sensors)      │
+            └────────┬────────┘
+                     │
+        ┌────────────┼─────────────┐
+        ▼            ▼             ▼
+  ┌───────────┐ ┌───────────┐ ┌───────────┐
+  │ Sensor A  │ │ Sensor B  │ │ Sensor C  │
+  │ (filter)  │ │ (filter)  │ │ (filter)  │
+  └─────┬─────┘ └─────┬─────┘ └─────┬─────┘
+        ▼             ▼             ▼
+  ┌───────────┐ ┌───────────┐ ┌───────────┐
+  │  HomeKit  │ │  HomeKit  │ │  HomeKit  │
+  │  Motion   │ │  Motion   │ │  Motion   │
+  │  Sensor   │ │  Sensor   │ │  Sensor   │
+  └───────────┘ └───────────┘ └───────────┘
+```
+
+Adding sensors does **not** add API calls — all sensors share the same pipeline.
 
 ---
 
@@ -70,11 +105,18 @@ Configure via the Homebridge UI with the built-in **searchable city selector**, 
   "turnoff_delay": 0,
   "alert_timeout": 1800000,
   "polling_interval": 1000,
+  "request_timeout": 3000,
+  "reconnect_interval": 10000,
+  "max_reconnect_interval": 60000,
+  "ping_interval": 60000,
+  "pong_timeout": 420000,
+  "health_check": false,
+  "health_check_threshold": 5,
   "debug": false
 }
 ```
 
-> **Migration note:** Upgrading from v1.3.2 or earlier? Your comma-separated `cities` strings will be automatically migrated to the new array format on first launch. No action needed.
+> **Migration note:** Upgrading from v1.x? Your comma-separated `cities` strings will be automatically migrated to the new array format on first launch. No action needed.
 
 ### Multi-Sensor Example
 
@@ -93,6 +135,55 @@ Each sensor creates a separate motion sensor in HomeKit with its own cities, cat
 
 ---
 
+## Alert Sources
+
+### Built-in Sources
+
+The plugin ships with two alert sources that run simultaneously:
+
+| Source | Type | Description |
+|--------|------|-------------|
+| **Pikud HaOref** | HTTP polling | Official Home Front Command API, polled every second (configurable) with adaptive timeout |
+| **Tzofar** | WebSocket | Real-time push alerts from tzevaadom.co.il with automatic reconnection and keep-alive |
+
+Both sources feed into the same deduplication pipeline, so you get the fastest possible alert delivery without duplicates.
+
+### Custom Add-on Sources
+
+You can add custom HTTP or WebSocket sources via the UI or `config.json`. Custom sources support category mapping to translate source-specific alert types to the plugin's categories:
+
+```json
+{
+  "platform": "RedAlert",
+  "sensors": [{ "name": "Home", "cities": ["תל אביב - יפו"] }],
+  "custom_sources": [
+    {
+      "name": "My Alert API",
+      "type": "http",
+      "url": "https://my-alert-api.example.com/alerts",
+      "headers": { "Authorization": "Bearer ..." },
+      "category_mapping": {
+        "ROCKET": "rockets",
+        "DRONE": "uav"
+      }
+    },
+    {
+      "name": "My WS Feed",
+      "type": "websocket",
+      "url": "wss://my-ws-feed.example.com/alerts",
+      "message_type": "ALERT",
+      "message_data_field": "data",
+      "category_mapping": {
+        "1": "rockets",
+        "2": "uav"
+      }
+    }
+  ]
+}
+```
+
+---
+
 ## Options Reference
 
 ### Sensor Options
@@ -104,16 +195,40 @@ Each sensor creates a separate motion sensor in HomeKit with its own cities, cat
 | `categories` | No | All | Alert types to monitor. If empty, all categories are enabled |
 | `prefix_matching` | No | `false` | City names match by prefix (e.g. "תל אביב" matches all Tel Aviv sub-areas) |
 
-### Advanced Options
+### HTTP Source Options
 
-Global settings available under the **Advanced** section in the Homebridge UI.
+| Option | Default | Description |
+|--------|---------|-------------|
+| `polling_interval` | `1000` | How often to poll HTTP sources in ms (500–5,000) |
+| `request_timeout` | `3000` | Max time to wait for HTTP response in ms (1,000–10,000) |
+
+### WebSocket Source Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `reconnect_interval` | `10000` | Initial delay (ms) before reconnecting after disconnect |
+| `max_reconnect_interval` | `60000` | Maximum reconnect delay (ms) after repeated failures (exponential backoff cap) |
+| `ping_interval` | `60000` | How often (ms) to send a keep-alive ping |
+| `pong_timeout` | `420000` | Max time (ms) to wait for a pong response before terminating (default: 7 min) |
+
+### Sensor Behavior
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `turnoff_delay` | `0` | Delay (ms) before turning off after alert ends. Resets if a new alert arrives (0–3,600,000) |
 | `alert_timeout` | `1800000` | Auto-clear alerts (ms) if "Event Ended" is never received. Default: 30 min (600,000–3,600,000) |
-| `polling_interval` | `1000` | How often to poll the API in ms (500–5,000) |
-| `request_timeout` | `3000` | API response timeout in ms. Increase for slow networks (1,000–10,000) |
+
+### Health Monitoring
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `health_check` | `false` | Adds a Switch to HomeKit that turns OFF when all sources are unreachable |
+| `health_check_threshold` | `5` | Consecutive failures per source before reporting unhealthy (2–30) |
+
+### General
+
+| Option | Default | Description |
+|--------|---------|-------------|
 | `debug` | `false` | Enable extra debug logging |
 
 ### Available Categories

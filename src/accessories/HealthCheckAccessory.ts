@@ -37,9 +37,9 @@ export class HealthCheckAccessory {
   updateHealth(healthy: boolean): void {
     this.service.updateCharacteristic(this.on, healthy);
     if (healthy) {
-      this.log.info('Health check: OREF API is reachable');
+      this.log.info('Health check: at least one source is reachable');
     } else {
-      this.log.warn('Health check: OREF API is UNREACHABLE');
+      this.log.warn('Health check: all sources UNREACHABLE');
     }
   }
 }

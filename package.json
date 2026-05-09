@@ -31,6 +31,7 @@
     "build": "rimraf ./dist && tsc && npm run copy-data",
     "copy-data": "mkdir -p dist/data && cp src/data/cities.json dist/data/",
     "test": "tsx --test src/**/*.spec.ts",
+    "test:connectivity": "tsx --test src/clients/connectivity.test.ts",
     "prepublishOnly": "npm run lint && npm run build",
     "first-publish": "npm publish --access public"
   },

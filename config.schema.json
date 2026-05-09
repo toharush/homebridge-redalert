@@ -105,21 +105,102 @@
       },
       "request_timeout": {
         "title": "Request Timeout (ms)",
-        "description": "How long to wait for the OREF API to respond before aborting the request. Increase if you have a slow network.",
+        "description": "How long to wait for an HTTP source to respond before aborting the request. Increase if you have a slow network.",
         "type": "number",
         "default": 3000,
         "minimum": 1000,
         "maximum": 10000
       },
+      "reconnect_interval": {
+        "title": "Reconnect Interval (ms)",
+        "description": "Initial delay before reconnecting a WebSocket source after disconnect.",
+        "type": "number",
+        "default": 10000,
+        "minimum": 1000,
+        "maximum": 60000
+      },
+      "max_reconnect_interval": {
+        "title": "Max Reconnect Interval (ms)",
+        "description": "Maximum reconnect delay after repeated WebSocket failures (exponential backoff cap).",
+        "type": "number",
+        "default": 60000,
+        "minimum": 5000,
+        "maximum": 300000
+      },
+      "ping_interval": {
+        "title": "Ping Interval (ms)",
+        "description": "How often to send a keep-alive ping to WebSocket sources.",
+        "type": "number",
+        "default": 60000,
+        "minimum": 10000,
+        "maximum": 300000
+      },
+      "pong_timeout": {
+        "title": "Pong Timeout (ms)",
+        "description": "Max time to wait for a pong response before terminating the WebSocket connection.",
+        "type": "number",
+        "default": 420000,
+        "minimum": 10000,
+        "maximum": 600000
+      },
+      "custom_sources": {
+        "title": "Custom Alert Sources",
+        "description": "Add custom HTTP or WebSocket alert sources alongside the built-in ones.",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["name", "type", "url"],
+          "properties": {
+            "name": {
+              "title": "Source Name",
+              "type": "string"
+            },
+            "type": {
+              "title": "Source Type",
+              "type": "string",
+              "enum": ["http", "websocket"]
+            },
+            "url": {
+              "title": "URL",
+              "type": "string"
+            },
+            "headers": {
+              "title": "Headers",
+              "description": "Custom HTTP headers as key-value pairs.",
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "category_mapping": {
+              "title": "Category Mapping",
+              "description": "Map source-specific category values to plugin categories.",
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "enum": ["rockets", "uav", "nonconventional", "warning", "earthquake", "cbrne", "terror", "tsunami", "hazmat"]
+              }
+            },
+            "message_type": {
+              "title": "Message Type Filter",
+              "description": "Only process WebSocket messages with this type field.",
+              "type": "string"
+            },
+            "message_data_field": {
+              "title": "Message Data Field",
+              "description": "Extract alert data from this field of the WebSocket message.",
+              "type": "string"
+            }
+          }
+        }
+      },
       "health_check": {
         "title": "Enable Health Check Sensor",
-        "description": "Adds a Contact Sensor to HomeKit that reports whether the OREF API is reachable.",
+        "description": "Adds a Switch to HomeKit that turns OFF when all alert sources are unreachable.",
         "type": "boolean",
         "default": false
       },
       "health_check_threshold": {
         "title": "Health Check Threshold",
-        "description": "Number of consecutive failed requests before the health sensor reports unhealthy.",
+        "description": "Consecutive failures per source before reporting unhealthy.",
         "type": "number",
         "default": 5,
         "minimum": 2,
@@ -151,12 +232,17 @@
       "title": "Advanced",
       "expandable": true,
       "items": [
-        "turnoff_delay",
-        "alert_timeout",
         "polling_interval",
         "request_timeout",
+        "reconnect_interval",
+        "max_reconnect_interval",
+        "ping_interval",
+        "pong_timeout",
+        "turnoff_delay",
+        "alert_timeout",
         "health_check",
         "health_check_threshold",
+        "custom_sources",
         "debug"
       ]
     }

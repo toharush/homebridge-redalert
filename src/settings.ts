@@ -10,12 +10,11 @@ export const OREF_HEADERS = {
 
 export const TZOFAR_WS_URL = 'wss://ws.tzevaadom.co.il/socket?platform=ANDROID';
 export function tzofarHeaders(): Record<string, string> {
-  const { randomBytes } = require('crypto');
   return {
     'User-Agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36',
     Referer: 'https://www.tzevaadom.co.il',
     Origin: 'https://www.tzevaadom.co.il',
-    'X-App-Token': randomBytes(16).toString('hex'),
+    'X-App-Token': Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join(''),
   };
 }
 

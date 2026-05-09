@@ -16,12 +16,22 @@ class MockSource implements AlertSource {
 
   start() {}
   stop() {}
-  isHealthy() { return this.healthy; }
-  onAlerts(cb: (alerts: OrefRealtimeAlert[]) => void) { this.alertCb = cb; }
-  onHealthChange(cb: (healthy: boolean) => void) { this.healthCb = cb; }
+  isHealthy() {
+    return this.healthy;
+  }
+  onAlerts(cb: (alerts: OrefRealtimeAlert[]) => void) {
+    this.alertCb = cb;
+  }
+  onHealthChange(cb: (healthy: boolean) => void) {
+    this.healthCb = cb;
+  }
 
-  emit(alerts: OrefRealtimeAlert[]) { this.alertCb?.(alerts); }
-  setHealth(h: boolean) { this.healthy = h; this.healthCb?.(h); }
+  emit(alerts: OrefRealtimeAlert[]) {
+    this.alertCb?.(alerts);
+  }
+  setHealth(h: boolean) {
+    this.healthy = h; this.healthCb?.(h);
+  }
 }
 
 function createLogger() {
@@ -44,7 +54,9 @@ describe('AlertPipeline', () => {
     const received: ParsedAlerts[] = [];
 
     pipeline.addSource(source);
-    pipeline.subscribe({ handleAlerts(p) { received.push(p); } });
+    pipeline.subscribe({ handleAlerts(p) {
+      received.push(p);
+    } });
     pipeline.start();
 
     source.emit([
@@ -62,7 +74,9 @@ describe('AlertPipeline', () => {
 
     pipeline.addStage(new DeduplicationStage());
     pipeline.addSource(source);
-    pipeline.subscribe({ handleAlerts(p) { received.push(p); } });
+    pipeline.subscribe({ handleAlerts(p) {
+      received.push(p);
+    } });
     pipeline.start();
 
     const alert = { id: '1', cat: '1', title: 'Rockets', data: ['city1'], desc: '' };
@@ -78,7 +92,9 @@ describe('AlertPipeline', () => {
     const received: ParsedAlerts[] = [];
 
     pipeline.addSource(source);
-    pipeline.subscribe({ handleAlerts(p) { received.push(p); } });
+    pipeline.subscribe({ handleAlerts(p) {
+      received.push(p);
+    } });
     pipeline.start();
 
     source.emit([]);
@@ -91,12 +107,16 @@ describe('AlertPipeline', () => {
     const received: ParsedAlerts[] = [];
 
     const filterStage: PipelineStage = {
-      process(alerts) { return alerts.filter(a => a.cat !== '99'); },
+      process(alerts) {
+        return alerts.filter(a => a.cat !== '99');
+      },
     };
 
     pipeline.addStage(filterStage);
     pipeline.addSource(source);
-    pipeline.subscribe({ handleAlerts(p) { received.push(p); } });
+    pipeline.subscribe({ handleAlerts(p) {
+      received.push(p);
+    } });
     pipeline.start();
 
     source.emit([
@@ -148,7 +168,9 @@ describe('AlertPipeline', () => {
     pipeline.addStage(new DeduplicationStage());
     pipeline.addSource(oref);
     pipeline.addSource(tzofar);
-    pipeline.subscribe({ handleAlerts(p) { received.push(p); } });
+    pipeline.subscribe({ handleAlerts(p) {
+      received.push(p);
+    } });
     pipeline.start();
 
     const alert: OrefRealtimeAlert = { id: '1', cat: '1', title: 'Rockets', data: ['תל אביב', 'חיפה'], desc: '' };
@@ -171,7 +193,9 @@ describe('AlertPipeline', () => {
     pipeline.addStage(new DeduplicationStage());
     pipeline.addSource(goodSource);
     pipeline.addSource(badSource);
-    pipeline.subscribe({ handleAlerts(p) { received.push(p); } });
+    pipeline.subscribe({ handleAlerts(p) {
+      received.push(p);
+    } });
     pipeline.start();
 
     // Good source: valid alert
@@ -199,7 +223,9 @@ describe('AlertPipeline', () => {
     pipeline.addStage(new DeduplicationStage());
     pipeline.addSource(oref);
     pipeline.addSource(tzofar);
-    pipeline.subscribe({ handleAlerts(p) { received.push(p); } });
+    pipeline.subscribe({ handleAlerts(p) {
+      received.push(p);
+    } });
     pipeline.start();
 
     oref.emit([{ id: '1', cat: '1', title: 'Rockets', data: ['תל אביב'], desc: '' }]);

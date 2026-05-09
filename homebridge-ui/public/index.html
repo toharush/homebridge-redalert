@@ -1,120 +1,308 @@
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css">
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css"
+/>
+<link rel="stylesheet" href="style.css" />
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
-
-<style>
-  .sensor-card { border: 1px solid #dee2e6; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-  .sensor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  .sensor-header h5 { margin: 0; }
-  .field-group { margin-bottom: 12px; }
-  .field-group label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 0.9em; }
-  .field-group .help-text { font-size: 0.8em; color: #6c757d; margin-top: 2px; }
-  .field-group input[type="text"], .field-group input[type="number"], .field-group select { width: 100%; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; }
-  .field-group input[type="checkbox"] { margin-right: 6px; }
-  .categories-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
-  .btn-add { background: #198754; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
-  .btn-remove { background: #dc3545; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
-  .btn-save { background: #0d6efd; color: white; border: none; padding: 10px 24px; border-radius: 4px; cursor: pointer; font-size: 1em; margin-top: 8px; }
-  .advanced-toggle { cursor: pointer; color: #0d6efd; font-weight: 600; margin-top: 16px; display: inline-block; }
-  .advanced-section { display: none; margin-top: 12px; border-top: 1px solid #dee2e6; padding-top: 12px; }
-  .advanced-section.show { display: block; }
-  .ts-wrapper { width: 100%; }
-  .disclaimer-box { background:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:12px 16px; margin-bottom:16px; font-size:0.85em; line-height:1.5; color:#664d03; }
-  .source-card { border: 1px solid #dee2e6; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; }
-  .source-card.builtin { background: #f8f9fa; border-color: #adb5bd; }
-  .source-card.builtin .source-badge { background: #6c757d; color: white; font-size: 0.7em; padding: 2px 8px; border-radius: 10px; margin-left: 8px; }
-  .source-card.addon .source-badge { background: #0d6efd; color: white; font-size: 0.7em; padding: 2px 8px; border-radius: 10px; margin-left: 8px; }
-  .source-header { display: flex; justify-content: space-between; align-items: center; }
-  .source-header h6 { margin: 0; display: flex; align-items: center; }
-  .source-info { font-size: 0.82em; color: #6c757d; margin-top: 4px; }
-  .source-fields { margin-top: 10px; }
-  .section-title { font-weight: 700; font-size: 1em; margin: 20px 0 10px; border-bottom: 1px solid #dee2e6; padding-bottom: 6px; }
-  @media (prefers-color-scheme: dark) {
-    .disclaimer-box { background:#332701; border-color:#665200; color:#ffda6a; }
-    .source-card.builtin { background: #1a1a1a; border-color: #555; }
-  }
-</style>
 
 <div id="app">
   <div class="disclaimer-box">
     <strong>&#9888; Disclaimer / &#x5D4;&#x5D1;&#x5D4;&#x5E8;&#x5D4;</strong>
-    <ul style="margin:8px 0 0; padding-left:20px;">
-      <li>This plugin is not an official Home Front Command product.<br>&#x5D4;&#x5EA;&#x5D5;&#x5E1;&#x5E3; &#x5D0;&#x5D9;&#x5E0;&#x5E0;&#x5D5; &#x5EA;&#x5D5;&#x5E1;&#x5E3; &#x5E8;&#x5E9;&#x5DE;&#x5D9; &#x5E9;&#x5DC; &#x5E4;&#x5D9;&#x5E7;&#x5D5;&#x5D3; &#x5D4;&#x5E2;&#x5D5;&#x5E8;&#x5E3;.</li>
-      <li>The plugin uses the Pikud HaOref public API. There may be delays or disruptions.<br>&#x5D4;&#x5EA;&#x5D5;&#x5E1;&#x5E3; &#x5DE;&#x5E9;&#x5EA;&#x5DE;&#x5E9; &#x5D1;-API &#x5E9;&#x5DC; &#x5E4;&#x5D9;&#x5E7;&#x5D5;&#x5D3; &#x5D4;&#x5E2;&#x5D5;&#x5E8;&#x5E3; &#x5D5;&#x5DC;&#x5DB;&#x5DF; &#x5D9;&#x5EA;&#x5DB;&#x5E0;&#x5D5; &#x5E9;&#x5D9;&#x5D1;&#x5D5;&#x5E9;&#x5D9;&#x5DD;.</li>
-      <li>Always use the official alert systems alongside this plugin.<br>&#x5D9;&#x5E9; &#x5DC;&#x5D4;&#x5DE;&#x5E9;&#x5D9;&#x5DA; &#x5DC;&#x5D4;&#x5E9;&#x5EA;&#x5DE;&#x5E9; &#x5D1;&#x5D0;&#x5DE;&#x5E6;&#x5E2;&#x5D9;&#x5DD; &#x5D4;&#x5E8;&#x5E9;&#x5DE;&#x5D9;&#x5D9;&#x5DD; &#x5E9;&#x5DC; &#x5DE;&#x5E2;&#x5E8;&#x5DB;&#x5EA; &#x5D4;&#x5D1;&#x5D9;&#x5D8;&#x5D7;&#x5D5;&#x5DF;.</li>
+    <ul style="margin: 8px 0 0; padding-left: 20px">
+      <li>
+        This plugin is not an official Home Front Command product.<br />&#x5D4;&#x5EA;&#x5D5;&#x5E1;&#x5E3;
+        &#x5D0;&#x5D9;&#x5E0;&#x5E0;&#x5D5; &#x5EA;&#x5D5;&#x5E1;&#x5E3;
+        &#x5E8;&#x5E9;&#x5DE;&#x5D9; &#x5E9;&#x5DC;
+        &#x5E4;&#x5D9;&#x5E7;&#x5D5;&#x5D3; &#x5D4;&#x5E2;&#x5D5;&#x5E8;&#x5E3;.
+      </li>
+      <li>
+        The plugin uses the Pikud HaOref public API. There may be delays or
+        disruptions.<br />&#x5D4;&#x5EA;&#x5D5;&#x5E1;&#x5E3;
+        &#x5DE;&#x5E9;&#x5EA;&#x5DE;&#x5E9; &#x5D1;-API &#x5E9;&#x5DC;
+        &#x5E4;&#x5D9;&#x5E7;&#x5D5;&#x5D3; &#x5D4;&#x5E2;&#x5D5;&#x5E8;&#x5E3;
+        &#x5D5;&#x5DC;&#x5DB;&#x5DF; &#x5D9;&#x5EA;&#x5DB;&#x5E0;&#x5D5;
+        &#x5E9;&#x5D9;&#x5D1;&#x5D5;&#x5E9;&#x5D9;&#x5DD;.
+      </li>
+      <li>
+        Always use the official alert systems alongside this plugin.<br />&#x5D9;&#x5E9;
+        &#x5DC;&#x5D4;&#x5DE;&#x5E9;&#x5D9;&#x5DA;
+        &#x5DC;&#x5D4;&#x5E9;&#x5EA;&#x5DE;&#x5E9;
+        &#x5D1;&#x5D0;&#x5DE;&#x5E6;&#x5E2;&#x5D9;&#x5DD;
+        &#x5D4;&#x5E8;&#x5E9;&#x5DE;&#x5D9;&#x5D9;&#x5DD; &#x5E9;&#x5DC;
+        &#x5DE;&#x5E2;&#x5E8;&#x5DB;&#x5EA;
+        &#x5D4;&#x5D1;&#x5D9;&#x5D8;&#x5D7;&#x5D5;&#x5DF;.
+      </li>
     </ul>
   </div>
-  <div style="text-align:center; margin-bottom:16px;">
-    <img src="plugin-icon.png" alt="Red Alert" style="width:80px; height:80px; border-radius:12px;">
-    <h4 style="margin:8px 0 4px">Red Alert</h4>
-    <p style="font-size:0.85em; color:#6c757d; margin:0;">Homebridge plugin for Pikud HaOref alerts</p>
+  <div style="text-align: center; margin-bottom: 16px">
+    <img
+      src="plugin-icon.png"
+      alt="Red Alert"
+      style="width: 80px; height: 80px; border-radius: 12px"
+    />
+    <h4 style="margin: 8px 0 4px">Red Alert</h4>
+    <p style="font-size: 0.85em; color: var(--text-muted); margin: 0">
+      Homebridge plugin for Pikud HaOref alerts
+    </p>
   </div>
 
   <!-- Alert Sources Section -->
   <div class="section-title">Alert Sources</div>
   <div id="sources-container">
-    <div class="source-card builtin">
+    <div
+      class="source-card builtin"
+      onclick="toggleSourceDetails('oref-details', this)"
+    >
       <div class="source-header">
-        <h6>Pikud HaOref <span class="source-badge">Built-in</span></h6>
+        <h6><span class="source-chevron">&#9654;</span>Pikud HaOref <span class="source-badge">Built-in</span></h6>
       </div>
-      <div class="source-info">HTTP Polling &bull; oref.org.il &bull; Real-time alerts from Home Front Command</div>
+      <div class="source-info">
+        HTTP &bull; oref.org.il &bull; Real-time alerts from Home Front Command
+      </div>
+      <div class="source-details" id="oref-details">
+        <table>
+          <tr>
+            <td>Type</td>
+            <td>HTTP</td>
+          </tr>
+          <tr>
+            <td>URL</td>
+            <td>oref.org.il/WarningMessages/alert/alerts.json</td>
+          </tr>
+          <tr>
+            <td>Polling Interval</td>
+            <td id="oref-polling">1000 ms</td>
+          </tr>
+          <tr>
+            <td>Request Timeout</td>
+            <td id="oref-timeout">3000 ms</td>
+          </tr>
+          <tr>
+            <td>Adaptive Timeout</td>
+            <td>Enabled</td>
+          </tr>
+        </table>
+        <div class="mapping-title">Category Mapping</div>
+        <div class="mapping-note">Native &mdash; Oref uses numeric category IDs directly</div>
+        <table class="mapping-table">
+          <tr><td>cat 1</td><td>&#8594;</td><td>rockets</td></tr>
+          <tr><td>cat 2</td><td>&#8594;</td><td>nonconventional</td></tr>
+          <tr><td>cat 3</td><td>&#8594;</td><td>earthquake</td></tr>
+          <tr><td>cat 4</td><td>&#8594;</td><td>cbrne</td></tr>
+          <tr><td>cat 5</td><td>&#8594;</td><td>tsunami</td></tr>
+          <tr><td>cat 6</td><td>&#8594;</td><td>uav</td></tr>
+          <tr><td>cat 7</td><td>&#8594;</td><td>hazmat</td></tr>
+          <tr><td>cat 8</td><td>&#8594;</td><td>warning</td></tr>
+          <tr><td>cat 10</td><td>&#8594;</td><td>warning (heads-up notice)</td></tr>
+          <tr><td>cat 13</td><td>&#8594;</td><td>terror</td></tr>
+        </table>
+      </div>
     </div>
-    <div class="source-card builtin">
+    <div
+      class="source-card builtin"
+      onclick="toggleSourceDetails('tzofar-details', this)"
+    >
       <div class="source-header">
-        <h6>Tzofar <span class="source-badge">Built-in</span></h6>
+        <h6><span class="source-chevron">&#9654;</span>Tzofar <span class="source-badge">Built-in</span></h6>
       </div>
-      <div class="source-info">WebSocket Push &bull; tzevaadom.co.il &bull; Instant push alerts via Tzofar</div>
+      <div class="source-info">
+        WebSocket &bull; tzevaadom.co.il &bull; Instant alerts via Tzofar
+      </div>
+      <div class="source-details" id="tzofar-details">
+        <table>
+          <tr>
+            <td>Type</td>
+            <td>WebSocket</td>
+          </tr>
+          <tr>
+            <td>URL</td>
+            <td>wss://ws.tzevaadom.co.il/socket</td>
+          </tr>
+          <tr>
+            <td>Reconnect Interval</td>
+            <td id="tzofar-reconnect">10000 ms</td>
+          </tr>
+          <tr>
+            <td>Max Reconnect</td>
+            <td id="tzofar-max-reconnect">60000 ms</td>
+          </tr>
+          <tr>
+            <td>Ping Interval</td>
+            <td id="tzofar-ping">60000 ms</td>
+          </tr>
+          <tr>
+            <td>Pong Timeout</td>
+            <td id="tzofar-pong">420000 ms</td>
+          </tr>
+          <tr>
+            <td>Message Types</td>
+            <td>ALERT, SYSTEM_MESSAGE</td>
+          </tr>
+        </table>
+        <div class="mapping-title">Category Mapping</div>
+        <div class="mapping-note">Tzofar uses <code>threat</code> IDs in ALERT messages</div>
+        <table class="mapping-table">
+          <tr><td>threat 0</td><td>&#8594;</td><td>rockets</td></tr>
+          <tr><td>threat 2</td><td>&#8594;</td><td>terror</td></tr>
+          <tr><td>threat 5</td><td>&#8594;</td><td>uav</td></tr>
+          <tr><td>threat 7</td><td>&#8594;</td><td>nonconventional</td></tr>
+        </table>
+        <div class="mapping-note" style="margin-top: 6px">SYSTEM_MESSAGE parsing</div>
+        <table class="mapping-table">
+          <tr><td>&#x5DE;&#x5D1;&#x5D6;&#x5E7; &#x5E4;&#x5D9;&#x5E7;&#x5D5;&#x5D3; &#x5D4;&#x5E2;&#x5D5;&#x5E8;&#x5E3;</td><td>&#8594;</td><td>warning (early warning)</td></tr>
+          <tr><td>&#x5E2;&#x5D3;&#x5DB;&#x5D5;&#x5DF; &#x5E4;&#x5D9;&#x5E7;&#x5D5;&#x5D3; &#x5D4;&#x5E2;&#x5D5;&#x5E8;&#x5E3;</td><td>&#8594;</td><td>event ended</td></tr>
+        </table>
+      </div>
     </div>
   </div>
   <div id="addon-sources-container"></div>
   <button class="btn-add" onclick="addAddonSource()">+ Add Source</button>
 
   <!-- Sensors Section -->
-  <div class="section-title" style="margin-top:24px;">Sensors</div>
+  <div class="section-title" style="margin-top: 24px">Sensors</div>
   <div id="sensors-container"></div>
   <button class="btn-add" onclick="addSensor()">+ Add Sensor</button>
 
-  <br>
-  <span class="advanced-toggle" onclick="toggleAdvanced()">&#9654; Advanced Settings</span>
+  <br />
+  <span class="advanced-toggle" onclick="toggleAdvanced()"
+    >&#9654; Advanced Settings</span
+  >
   <div id="advanced-section" class="advanced-section">
-
-    <h6 style="margin:0 0 8px; color:#6c757d;">Oref HTTP Source</h6>
+    <h6 style="margin: 0 0 8px; color: var(--text-muted)">HTTP Sources</h6>
     <div class="field-group">
       <label>Polling Interval (ms)</label>
-      <input type="number" id="polling_interval" min="500" max="5000" value="1000">
-      <div class="help-text">How often to poll Pikud HaOref API. Default: 1000.</div>
+      <input
+        type="number"
+        id="polling_interval"
+        min="500"
+        max="5000"
+        value="1000"
+      />
+      <div class="help-text">
+        How often to poll HTTP sources. Default: 1000.
+      </div>
     </div>
     <div class="field-group">
       <label>Request Timeout (ms)</label>
-      <input type="number" id="request_timeout" min="1000" max="10000" value="3000">
-      <div class="help-text">Max time to wait for Oref API response. Default: 3000.</div>
+      <input
+        type="number"
+        id="request_timeout"
+        min="1000"
+        max="10000"
+        value="3000"
+      />
+      <div class="help-text">
+        Max time to wait for HTTP source response. Default: 3000.
+      </div>
     </div>
 
-    <h6 style="margin:16px 0 8px; color:#6c757d;">Sensor Behavior</h6>
+    <h6 style="margin: 16px 0 8px; color: var(--text-muted)">WebSocket Sources</h6>
+    <div class="field-group">
+      <label>Reconnect Interval (ms)</label>
+      <input
+        type="number"
+        id="reconnect_interval"
+        min="1000"
+        max="60000"
+        value="10000"
+      />
+      <div class="help-text">
+        Initial delay before reconnecting after disconnect. Default: 10000.
+      </div>
+    </div>
+    <div class="field-group">
+      <label>Max Reconnect Interval (ms)</label>
+      <input
+        type="number"
+        id="max_reconnect_interval"
+        min="5000"
+        max="300000"
+        value="60000"
+      />
+      <div class="help-text">
+        Maximum reconnect delay after repeated failures (exponential backoff
+        cap). Default: 60000.
+      </div>
+    </div>
+    <div class="field-group">
+      <label>Ping Interval (ms)</label>
+      <input
+        type="number"
+        id="ping_interval"
+        min="10000"
+        max="300000"
+        value="60000"
+      />
+      <div class="help-text">
+        How often to send a keep-alive ping. Default: 60000.
+      </div>
+    </div>
+    <div class="field-group">
+      <label>Pong Timeout (ms)</label>
+      <input
+        type="number"
+        id="pong_timeout"
+        min="10000"
+        max="600000"
+        value="420000"
+      />
+      <div class="help-text">
+        Max time to wait for a pong response before terminating. Default: 420000
+        (7 min).
+      </div>
+    </div>
+
+    <h6 style="margin: 16px 0 8px; color: var(--text-muted)">Sensor Behavior</h6>
     <div class="field-group">
       <label>Turn-Off Delay (ms)</label>
-      <input type="number" id="turnoff_delay" min="0" max="3600000" value="0">
-      <div class="help-text">Delay before turning off sensor after alert ends. Default: 0 (instant).</div>
+      <input type="number" id="turnoff_delay" min="0" max="3600000" value="0" />
+      <div class="help-text">
+        Delay before turning off sensor after alert ends. Default: 0 (instant).
+      </div>
     </div>
     <div class="field-group">
       <label>Alert Timeout (ms)</label>
-      <input type="number" id="alert_timeout" min="600000" max="3600000" value="1800000">
-      <div class="help-text">Auto-clear sensor if "Event Ended" not received. Default: 1800000 (30 min).</div>
+      <input
+        type="number"
+        id="alert_timeout"
+        min="600000"
+        max="3600000"
+        value="1800000"
+      />
+      <div class="help-text">
+        Auto-clear sensor if "Event Ended" not received. Default: 1800000 (30
+        min).
+      </div>
     </div>
 
-    <h6 style="margin:16px 0 8px; color:#6c757d;">Health Monitoring</h6>
+    <h6 style="margin: 16px 0 8px; color: var(--text-muted)">Health Monitoring</h6>
     <div class="field-group">
-      <label><input type="checkbox" id="health_check"> Enable Health Check Switch</label>
-      <div class="help-text">Adds a Switch to HomeKit that turns OFF when all sources are unreachable.</div>
+      <label
+        ><input type="checkbox" id="health_check" /> Enable Health Check
+        Switch</label
+      >
+      <div class="help-text">
+        Adds a Switch to HomeKit that turns OFF when all sources are
+        unreachable.
+      </div>
     </div>
     <div class="field-group">
       <label>Health Check Threshold</label>
-      <input type="number" id="health_check_threshold" min="2" max="30" value="5">
-      <div class="help-text">Consecutive failures per source before reporting unhealthy. Default: 5.</div>
+      <input
+        type="number"
+        id="health_check_threshold"
+        min="2"
+        max="30"
+        value="5"
+      />
+      <div class="help-text">
+        Consecutive failures per source before reporting unhealthy. Default: 5.
+      </div>
     </div>
 
-    <h6 style="margin:16px 0 8px; color:#6c757d;">General</h6>
+    <h6 style="margin: 16px 0 8px; color: var(--text-muted)">General</h6>
     <div class="field-group">
-      <label><input type="checkbox" id="debug"> Enable Debug Logs</label>
+      <label><input type="checkbox" id="debug" /> Enable Debug Logs</label>
     </div>
   </div>
 </div>
@@ -129,44 +317,57 @@
   let initializing = true;
 
   const CATEGORIES = [
-    { key: 'rockets', label: 'Rockets & Missiles (ירי רקטות וטילים)' },
-    { key: 'uav', label: 'UAV Intrusion (חדירת כלי טיס)' },
-    { key: 'nonconventional', label: 'Non-conventional Threat' },
-    { key: 'warning', label: 'Heads-up Notice (התרעה מוקדמת)' },
-    { key: 'earthquake', label: 'Earthquake (רעידת אדמה)' },
-    { key: 'cbrne', label: 'Chemical/Bio/Nuclear (CBRNE)' },
-    { key: 'terror', label: 'Terrorist Infiltration (חדירת מחבלים)' },
-    { key: 'tsunami', label: 'Tsunami (צונאמי)' },
-    { key: 'hazmat', label: 'Hazardous Materials (חומרים מסוכנים)' },
+    { key: "rockets", label: "Rockets & Missiles (ירי רקטות וטילים)" },
+    { key: "uav", label: "UAV Intrusion (חדירת כלי טיס)" },
+    { key: "nonconventional", label: "Non-conventional Threat" },
+    { key: "warning", label: "Heads-up Notice (התרעה מוקדמת)" },
+    { key: "earthquake", label: "Earthquake (רעידת אדמה)" },
+    { key: "cbrne", label: "Chemical/Bio/Nuclear (CBRNE)" },
+    { key: "terror", label: "Terrorist Infiltration (חדירת מחבלים)" },
+    { key: "tsunami", label: "Tsunami (צונאמי)" },
+    { key: "hazmat", label: "Hazardous Materials (חומרים מסוכנים)" },
   ];
 
-  const CATEGORY_KEYS = CATEGORIES.map(c => c.key);
+  const CATEGORY_KEYS = CATEGORIES.map((c) => c.key);
 
   async function init() {
     homebridge.showSpinner();
     try {
-      cities = await homebridge.request('/cities');
+      cities = await homebridge.request("/cities");
     } catch (e) {
       cities = [];
-      homebridge.toast.error('Failed to load cities list');
+      homebridge.toast.error("Failed to load cities list");
     }
 
     let config;
     try {
-      config = (await homebridge.request('/config')) || {};
+      config = (await homebridge.request("/config")) || {};
     } catch {
       config = (await homebridge.getPluginConfig())[0] || {};
     }
     sensors = config.sensors || [];
     addonSources = config.custom_sources || [];
 
-    document.getElementById('turnoff_delay').value = config.turnoff_delay ?? 0;
-    document.getElementById('alert_timeout').value = config.alert_timeout ?? 1800000;
-    document.getElementById('polling_interval').value = config.polling_interval ?? 1000;
-    document.getElementById('request_timeout').value = config.request_timeout ?? 3000;
-    document.getElementById('health_check').checked = config.health_check ?? false;
-    document.getElementById('health_check_threshold').value = config.health_check_threshold ?? 5;
-    document.getElementById('debug').checked = config.debug ?? false;
+    document.getElementById("turnoff_delay").value = config.turnoff_delay ?? 0;
+    document.getElementById("alert_timeout").value =
+      config.alert_timeout ?? 1800000;
+    document.getElementById("polling_interval").value =
+      config.polling_interval ?? 1000;
+    document.getElementById("request_timeout").value =
+      config.request_timeout ?? 3000;
+    document.getElementById("reconnect_interval").value =
+      config.reconnect_interval ?? 10000;
+    document.getElementById("max_reconnect_interval").value =
+      config.max_reconnect_interval ?? 60000;
+    document.getElementById("ping_interval").value =
+      config.ping_interval ?? 60000;
+    document.getElementById("pong_timeout").value =
+      config.pong_timeout ?? 420000;
+    document.getElementById("health_check").checked =
+      config.health_check ?? false;
+    document.getElementById("health_check_threshold").value =
+      config.health_check_threshold ?? 5;
+    document.getElementById("debug").checked = config.debug ?? false;
 
     addonSources.forEach((s) => renderAddonSource(s));
 
@@ -175,6 +376,7 @@
     } else {
       sensors.forEach((s, i) => renderSensor(s, i));
     }
+    updateBuiltinCards();
     initializing = false;
     homebridge.hideSpinner();
   }
@@ -182,61 +384,65 @@
   // --- Addon Sources ---
   function renderAddonSource(source) {
     const id = addonCounter++;
-    const container = document.getElementById('addon-sources-container');
-    const card = document.createElement('div');
-    card.className = 'source-card addon';
+    const container = document.getElementById("addon-sources-container");
+    const card = document.createElement("div");
+    card.className = "source-card addon";
     card.id = `addon-source-${id}`;
 
     card.innerHTML = `
       <div class="source-header">
-        <h6>${escapeHtml(source.name || 'Custom Source')} <span class="source-badge">Add-on</span></h6>
+        <h6>${escapeHtml(source.name || "Custom Source")} <span class="source-badge">Add-on</span></h6>
         <button class="btn-remove" onclick="removeAddonSource(${id})">Remove</button>
       </div>
       <div class="source-fields">
         <div class="field-group">
           <label>Name</label>
-          <input type="text" class="addon-name" value="${escapeHtml(source.name || '')}" placeholder="e.g. My Alert API">
+          <input type="text" class="addon-name" value="${escapeHtml(source.name || "")}" placeholder="e.g. My Alert API">
         </div>
         <div class="field-group">
           <label>Type</label>
           <select class="addon-type">
-            <option value="http" ${source.type === 'http' ? 'selected' : ''}>HTTP Polling</option>
-            <option value="websocket" ${source.type === 'websocket' ? 'selected' : ''}>WebSocket Push</option>
+            <option value="http" ${source.type === "http" ? "selected" : ""}>HTTP</option>
+            <option value="websocket" ${source.type === "websocket" ? "selected" : ""}>WebSocket</option>
           </select>
         </div>
         <div class="field-group">
           <label>URL</label>
-          <input type="text" class="addon-url" value="${escapeHtml(source.url || '')}" placeholder="https:// or wss://">
+          <input type="text" class="addon-url" value="${escapeHtml(source.url || "")}" placeholder="https:// or wss://">
         </div>
         <div class="field-group">
           <label>Category Mapping</label>
           <div class="category-mapping-rows" id="catmap-${id}">
-            ${Object.entries(source.category_mapping || {}).map(([k, v]) => `
+            ${Object.entries(source.category_mapping || {})
+              .map(
+                ([k, v]) => `
               <div class="catmap-row" style="display:flex;gap:6px;margin-bottom:4px;align-items:center;">
-                <input type="text" class="catmap-key" value="${escapeHtml(k)}" placeholder="Source value" style="flex:1;padding:4px 8px;border:1px solid #ced4da;border-radius:4px;">
-                <span style="color:#6c757d;">→</span>
-                <select class="catmap-value" style="flex:1;padding:4px 8px;border:1px solid #ced4da;border-radius:4px;">
-                  ${CATEGORIES.map(c => `<option value="${c.key}" ${v === c.key ? 'selected' : ''}>${c.label}</option>`).join('')}
+                <input type="text" class="catmap-key" value="${escapeHtml(k)}" placeholder="Source value" style="flex:1;padding:4px 8px;border-radius:4px;">
+                <span style="color:var(--text-muted);">&#8594;</span>
+                <select class="catmap-value" style="flex:1;padding:4px 8px;border-radius:4px;">
+                  ${CATEGORIES.map((c) => `<option value="${c.key}" ${v === c.key ? "selected" : ""}>${c.label}</option>`).join("")}
                 </select>
-                <button type="button" onclick="this.parentElement.remove();saveConfig();" style="background:#dc3545;color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">×</button>
+                <button type="button" onclick="this.parentElement.remove();saveConfig();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
               </div>
-            `).join('')}
+            `,
+              )
+              .join("")}
           </div>
-          <button type="button" onclick="addCatmapRow(${id})" style="font-size:0.8em;background:none;border:1px solid #ced4da;border-radius:4px;padding:2px 10px;cursor:pointer;margin-top:4px;">+ Add mapping</button>
+          <button type="button" onclick="addCatmapRow(${id})" style="font-size:0.8em;background:none;border:1px solid var(--border-input);border-radius:4px;padding:2px 10px;cursor:pointer;margin-top:4px;">+ Add mapping</button>
           <div class="help-text">Map source-specific category values to alert types.</div>
         </div>
         <div class="field-group">
           <label>Headers (JSON, optional)</label>
           <input type="text" class="addon-headers" value="${escapeHtml(JSON.stringify(source.headers || {}))}" placeholder='{"Authorization":"Bearer ..."}'>
         </div>
-        <div class="field-group addon-ws-fields" style="${source.type === 'websocket' ? '' : 'display:none'}">
+        <div class="field-group addon-ws-fields" style="${source.type === "websocket" ? "" : "display:none"}">
           <label>Message Type Filter (optional)</label>
-          <input type="text" class="addon-message-type" value="${escapeHtml(source.message_type || '')}" placeholder="e.g. ALERT">
+          <input type="text" class="addon-message-type" value="${escapeHtml(source.message_type || "")}" placeholder="e.g. ALERT">
           <div class="help-text">Only process WebSocket messages with this type field.</div>
         </div>
-        <div class="field-group addon-ws-fields" style="${source.type === 'websocket' ? '' : 'display:none'}">
+        <div class="field-group addon-ws-fields" style="${source.type === "websocket" ? "" : "display:none"}">
           <label>Message Data Field (optional)</label>
-          <input type="text" class="addon-message-data-field" value="${escapeHtml(source.message_data_field || '')}" placeholder="e.g. data">
+          <input type="text" class="addon-message-data-field" value="${escapeHtml(source.message_data_field || "")}" placeholder="e.g. data">
           <div class="help-text">Extract alert data from this field of the message.</div>
         </div>
       </div>
@@ -244,10 +450,13 @@
 
     container.appendChild(card);
 
-    const typeSelect = card.querySelector('.addon-type');
-    typeSelect.addEventListener('change', () => {
-      const wsFields = card.querySelectorAll('.addon-ws-fields');
-      wsFields.forEach(f => f.style.display = typeSelect.value === 'websocket' ? '' : 'none');
+    const typeSelect = card.querySelector(".addon-type");
+    typeSelect.addEventListener("change", () => {
+      const wsFields = card.querySelectorAll(".addon-ws-fields");
+      wsFields.forEach(
+        (f) =>
+          (f.style.display = typeSelect.value === "websocket" ? "" : "none"),
+      );
       saveConfig();
     });
 
@@ -255,7 +464,12 @@
   }
 
   function addAddonSource() {
-    renderAddonSource({ name: '', type: 'http', url: '', category_mapping: {} });
+    renderAddonSource({
+      name: "",
+      type: "http",
+      url: "",
+      category_mapping: {},
+    });
     saveConfig();
   }
 
@@ -266,48 +480,55 @@
 
   function addCatmapRow(addonId) {
     const container = document.getElementById(`catmap-${addonId}`);
-    const row = document.createElement('div');
-    row.className = 'catmap-row';
-    row.style.cssText = 'display:flex;gap:6px;margin-bottom:4px;align-items:center;';
+    const row = document.createElement("div");
+    row.className = "catmap-row";
+    row.style.cssText =
+      "display:flex;gap:6px;margin-bottom:4px;align-items:center;";
     row.innerHTML = `
-      <input type="text" class="catmap-key" value="" placeholder="Source value" style="flex:1;padding:4px 8px;border:1px solid #ced4da;border-radius:4px;">
-      <span style="color:#6c757d;">→</span>
-      <select class="catmap-value" style="flex:1;padding:4px 8px;border:1px solid #ced4da;border-radius:4px;">
-        ${CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join('')}
+      <input type="text" class="catmap-key" value="" placeholder="Source value" style="flex:1;padding:4px 8px;border-radius:4px;">
+      <span style="color:var(--text-muted);">&#8594;</span>
+      <select class="catmap-value" style="flex:1;padding:4px 8px;border-radius:4px;">
+        ${CATEGORIES.map((c) => `<option value="${c.key}">${c.label}</option>`).join("")}
       </select>
-      <button type="button" onclick="this.parentElement.remove();saveConfig();" style="background:#dc3545;color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">×</button>
+      <button type="button" onclick="this.parentElement.remove();saveConfig();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
     `;
     container.appendChild(row);
     saveOnChange();
   }
 
   function collectAddonSources() {
-    const cards = document.querySelectorAll('#addon-sources-container .source-card');
+    const cards = document.querySelectorAll(
+      "#addon-sources-container .source-card",
+    );
     const sources = [];
-    cards.forEach(card => {
-      const type = card.querySelector('.addon-type').value;
+    cards.forEach((card) => {
+      const type = card.querySelector(".addon-type").value;
       const source = {
-        name: card.querySelector('.addon-name').value.trim(),
+        name: card.querySelector(".addon-name").value.trim(),
         type,
-        url: card.querySelector('.addon-url').value.trim(),
+        url: card.querySelector(".addon-url").value.trim(),
       };
 
       const mapping = {};
-      card.querySelectorAll('.catmap-row').forEach(row => {
-        const key = row.querySelector('.catmap-key').value.trim();
-        const value = row.querySelector('.catmap-value').value;
+      card.querySelectorAll(".catmap-row").forEach((row) => {
+        const key = row.querySelector(".catmap-key").value.trim();
+        const value = row.querySelector(".catmap-value").value;
         if (key) mapping[key] = value;
       });
       if (Object.keys(mapping).length > 0) source.category_mapping = mapping;
 
       try {
-        const headers = JSON.parse(card.querySelector('.addon-headers').value || '{}');
+        const headers = JSON.parse(
+          card.querySelector(".addon-headers").value || "{}",
+        );
         if (Object.keys(headers).length > 0) source.headers = headers;
       } catch {}
 
-      if (type === 'websocket') {
-        const msgType = card.querySelector('.addon-message-type').value.trim();
-        const msgDataField = card.querySelector('.addon-message-data-field').value.trim();
+      if (type === "websocket") {
+        const msgType = card.querySelector(".addon-message-type").value.trim();
+        const msgDataField = card
+          .querySelector(".addon-message-data-field")
+          .value.trim();
         if (msgType) source.message_type = msgType;
         if (msgDataField) source.message_data_field = msgDataField;
       }
@@ -320,9 +541,9 @@
   // --- Sensors ---
   function renderSensor(sensor, index) {
     const id = sensorCounter++;
-    const container = document.getElementById('sensors-container');
-    const card = document.createElement('div');
-    card.className = 'sensor-card';
+    const container = document.getElementById("sensors-container");
+    const card = document.createElement("div");
+    card.className = "sensor-card";
     card.id = `sensor-${id}`;
     card.dataset.index = index;
 
@@ -331,12 +552,12 @@
 
     card.innerHTML = `
       <div class="sensor-header">
-        <h5>Sensor: ${sensor.name || 'New Sensor'}</h5>
+        <h5>Sensor: ${sensor.name || "New Sensor"}</h5>
         <button class="btn-remove" onclick="removeSensor(${id})">Remove</button>
       </div>
       <div class="field-group">
         <label>Sensor Name</label>
-        <input type="text" class="sensor-name" value="${escapeHtml(sensor.name || '')}" placeholder="e.g. Home">
+        <input type="text" class="sensor-name" value="${escapeHtml(sensor.name || "")}" placeholder="e.g. Home">
       </div>
       <div class="field-group">
         <label>Cities</label>
@@ -346,15 +567,17 @@
       <div class="field-group">
         <label>Alert Categories</label>
         <div class="categories-grid">
-          ${CATEGORIES.map(c => `
+          ${CATEGORIES.map(
+            (c) => `
             <label><input type="checkbox" class="cat-checkbox" value="${c.key}"
-              ${selectedCategories.includes(c.key) ? 'checked' : ''}> ${c.label}</label>
-          `).join('')}
+              ${selectedCategories.includes(c.key) ? "checked" : ""}> ${c.label}</label>
+          `,
+          ).join("")}
         </div>
         <div class="help-text">Leave all unchecked to monitor all categories.</div>
       </div>
       <div class="field-group">
-        <label><input type="checkbox" class="prefix-matching" ${sensor.prefix_matching ? 'checked' : ''}> Enable Prefix Matching</label>
+        <label><input type="checkbox" class="prefix-matching" ${sensor.prefix_matching ? "checked" : ""}> Enable Prefix Matching</label>
         <div class="help-text">Match sub-areas automatically (e.g. "תל אביב" matches "תל אביב - יפו").</div>
       </div>
     `;
@@ -362,15 +585,18 @@
     container.appendChild(card);
 
     const selectEl = document.getElementById(`cities-${id}`);
-    const knownValues = new Set(cities.map(c => c.name));
-    const allOptions = cities.map(c => ({ value: c.name, label: c.area ? `${c.name} (${c.area})` : c.name }));
-    sensorCities.forEach(city => {
+    const knownValues = new Set(cities.map((c) => c.name));
+    const allOptions = cities.map((c) => ({
+      value: c.name,
+      label: c.area ? `${c.name} (${c.area})` : c.name,
+    }));
+    sensorCities.forEach((city) => {
       if (city && !knownValues.has(city)) {
         allOptions.push({ value: city, label: city });
       }
     });
-    allOptions.forEach(opt => {
-      const el = document.createElement('option');
+    allOptions.forEach((opt) => {
+      const el = document.createElement("option");
       el.value = opt.value;
       el.textContent = opt.label;
       if (sensorCities.includes(opt.value)) {
@@ -381,12 +607,14 @@
 
     tomInstances[id] = new TomSelect(`#cities-${id}`, {
       create: true,
-      createFilter: function(input) { return input.trim().length > 0; },
+      createFilter: function (input) {
+        return input.trim().length > 0;
+      },
       maxOptions: 100,
       closeAfterSelect: false,
       persist: true,
       render: {
-        option_create: function(data, escape) {
+        option_create: function (data, escape) {
           return `<div class="create">Add: <strong>${escape(data.input)}</strong></div>`;
         },
       },
@@ -399,15 +627,21 @@
     if (Array.isArray(sensor.cities)) {
       return sensor.cities;
     }
-    if (typeof sensor.cities === 'string' && sensor.cities.trim()) {
-      return sensor.cities.split(',').map(c => c.trim()).filter(Boolean);
+    if (typeof sensor.cities === "string" && sensor.cities.trim()) {
+      return sensor.cities
+        .split(",")
+        .map((c) => c.trim())
+        .filter(Boolean);
     }
     return [];
   }
 
   function addSensor() {
-    const index = document.querySelectorAll('.sensor-card').length;
-    renderSensor({ name: '', cities: [], categories: [], prefix_matching: false }, index);
+    const index = document.querySelectorAll(".sensor-card").length;
+    renderSensor(
+      { name: "", cities: [], categories: [], prefix_matching: false },
+      index,
+    );
   }
 
   function removeSensor(id) {
@@ -421,15 +655,19 @@
 
   // --- Config ---
   function collectConfig() {
-    const sensorCards = document.querySelectorAll('.sensor-card');
+    const sensorCards = document.querySelectorAll(".sensor-card");
     const collectedSensors = [];
 
-    sensorCards.forEach(card => {
-      const id = card.id.replace('sensor-', '');
-      const name = card.querySelector('.sensor-name').value.trim();
-      const selectedCities = tomInstances[id] ? tomInstances[id].getValue() : [];
-      const categories = [...card.querySelectorAll('.cat-checkbox:checked')].map(c => c.value);
-      const prefixMatching = card.querySelector('.prefix-matching').checked;
+    sensorCards.forEach((card) => {
+      const id = card.id.replace("sensor-", "");
+      const name = card.querySelector(".sensor-name").value.trim();
+      const selectedCities = tomInstances[id]
+        ? tomInstances[id].getValue()
+        : [];
+      const categories = [
+        ...card.querySelectorAll(".cat-checkbox:checked"),
+      ].map((c) => c.value);
+      const prefixMatching = card.querySelector(".prefix-matching").checked;
 
       collectedSensors.push({
         name: name,
@@ -442,16 +680,30 @@
     const customSources = collectAddonSources();
 
     const config = {
-      platform: 'RedAlert',
-      name: '@toharush/homebridge-redalert',
+      platform: "RedAlert",
+      name: "@toharush/homebridge-redalert",
       sensors: collectedSensors,
-      turnoff_delay: parseInt(document.getElementById('turnoff_delay').value) || 0,
-      alert_timeout: parseInt(document.getElementById('alert_timeout').value) || 1800000,
-      polling_interval: parseInt(document.getElementById('polling_interval').value) || 1000,
-      request_timeout: parseInt(document.getElementById('request_timeout').value) || 3000,
-      health_check: document.getElementById('health_check').checked,
-      health_check_threshold: parseInt(document.getElementById('health_check_threshold').value) || 5,
-      debug: document.getElementById('debug').checked,
+      turnoff_delay:
+        parseInt(document.getElementById("turnoff_delay").value) || 0,
+      alert_timeout:
+        parseInt(document.getElementById("alert_timeout").value) || 1800000,
+      polling_interval:
+        parseInt(document.getElementById("polling_interval").value) || 1000,
+      request_timeout:
+        parseInt(document.getElementById("request_timeout").value) || 3000,
+      reconnect_interval:
+        parseInt(document.getElementById("reconnect_interval").value) || 10000,
+      max_reconnect_interval:
+        parseInt(document.getElementById("max_reconnect_interval").value) ||
+        60000,
+      ping_interval:
+        parseInt(document.getElementById("ping_interval").value) || 60000,
+      pong_timeout:
+        parseInt(document.getElementById("pong_timeout").value) || 420000,
+      health_check: document.getElementById("health_check").checked,
+      health_check_threshold:
+        parseInt(document.getElementById("health_check_threshold").value) || 5,
+      debug: document.getElementById("debug").checked,
     };
 
     if (customSources.length > 0) {
@@ -466,32 +718,56 @@
     try {
       const config = collectConfig();
       await homebridge.updatePluginConfig([config]);
-      homebridge.toast.success('Configuration saved successfully.');
+      updateBuiltinCards();
+      homebridge.toast.success("Configuration saved successfully.");
     } catch (e) {
-      homebridge.toast.error('Failed to save configuration.');
+      homebridge.toast.error("Failed to save configuration.");
     }
   }
 
   function saveOnChange() {
-    document.querySelectorAll('input, select').forEach(el => {
-      el.removeEventListener('change', saveConfig);
-      el.addEventListener('change', saveConfig);
+    document.querySelectorAll("input, select").forEach((el) => {
+      el.removeEventListener("change", saveConfig);
+      el.addEventListener("change", saveConfig);
     });
-    Object.values(tomInstances).forEach(ts => {
-      ts.off('change');
-      ts.on('change', saveConfig);
+    Object.values(tomInstances).forEach((ts) => {
+      ts.off("change");
+      ts.on("change", saveConfig);
     });
+  }
+
+  function toggleSourceDetails(id, card) {
+    const el = document.getElementById(id);
+    el.classList.toggle("show");
+    card.classList.toggle("expanded");
+  }
+
+  function updateBuiltinCards() {
+    const pi = document.getElementById("polling_interval").value;
+    const rt = document.getElementById("request_timeout").value;
+    const ri = document.getElementById("reconnect_interval").value;
+    const mri = document.getElementById("max_reconnect_interval").value;
+    const ping = document.getElementById("ping_interval").value;
+    const pong = document.getElementById("pong_timeout").value;
+    document.getElementById("oref-polling").textContent = pi + " ms";
+    document.getElementById("oref-timeout").textContent = rt + " ms";
+    document.getElementById("tzofar-reconnect").textContent = ri + " ms";
+    document.getElementById("tzofar-max-reconnect").textContent = mri + " ms";
+    document.getElementById("tzofar-ping").textContent = ping + " ms";
+    document.getElementById("tzofar-pong").textContent = pong + " ms";
   }
 
   function toggleAdvanced() {
-    const section = document.getElementById('advanced-section');
-    const toggle = document.querySelector('.advanced-toggle');
-    section.classList.toggle('show');
-    toggle.innerHTML = section.classList.contains('show') ? '&#9660; Advanced Settings' : '&#9654; Advanced Settings';
+    const section = document.getElementById("advanced-section");
+    const toggle = document.querySelector(".advanced-toggle");
+    section.classList.toggle("show");
+    toggle.innerHTML = section.classList.contains("show")
+      ? "&#9660; Advanced Settings"
+      : "&#9654; Advanced Settings";
   }
 
   function escapeHtml(str) {
-    const div = document.createElement('div');
+    const div = document.createElement("div");
     div.textContent = str;
     return div.innerHTML;
   }

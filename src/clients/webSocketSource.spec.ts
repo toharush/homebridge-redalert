@@ -1,14 +1,6 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
-
-let WebSocketSource: any;
-let wsAvailable = false;
-try {
-  ({ WebSocketSource } = require('./webSocketSource'));
-  wsAvailable = true;
-} catch {
-  // ws module not installed — tests will be skipped
-}
+import { WebSocketSource } from './webSocketSource';
 
 function createLogger() {
   return {
@@ -23,7 +15,7 @@ function createLogger() {
   } as any;
 }
 
-describe('WebSocketSource', { skip: !wsAvailable ? 'ws module not installed' : undefined }, () => {
+describe('WebSocketSource', () => {
   it('starts healthy before connection', () => {
     const log = createLogger();
     const source = new WebSocketSource(log, {

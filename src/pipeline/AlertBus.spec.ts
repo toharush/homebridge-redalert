@@ -12,10 +12,16 @@ class MockSource implements AlertSource {
   private alertCb: ((alerts: OrefRealtimeAlert[]) => void) | null = null;
   start() {}
   stop() {}
-  isHealthy() { return true; }
-  onAlerts(cb: (alerts: OrefRealtimeAlert[]) => void) { this.alertCb = cb; }
+  isHealthy() {
+    return true;
+  }
+  onAlerts(cb: (alerts: OrefRealtimeAlert[]) => void) {
+    this.alertCb = cb;
+  }
   onHealthChange() {}
-  emit(alerts: OrefRealtimeAlert[]) { this.alertCb?.(alerts); }
+  emit(alerts: OrefRealtimeAlert[]) {
+    this.alertCb?.(alerts);
+  }
 }
 
 function createLogger() {
@@ -28,7 +34,9 @@ describe('AlertPipeline: subscribe/publish', () => {
     const source = new MockSource();
     const received: ParsedAlerts[] = [];
 
-    const listener: AlertListener = { handleAlerts(parsed) { received.push(parsed); } };
+    const listener: AlertListener = { handleAlerts(parsed) {
+      received.push(parsed);
+    } };
     pipeline.addSource(source);
     pipeline.subscribe(listener);
     pipeline.subscribe(listener);
