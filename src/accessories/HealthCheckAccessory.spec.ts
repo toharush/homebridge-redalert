@@ -19,28 +19,28 @@ function createMockHomekit() {
   return {
     Service: {
       AccessoryInformation: 'AccessoryInformation',
-      ContactSensor: 'ContactSensor',
+      Switch: 'Switch',
     },
     Characteristic: {
       Manufacturer: 'Manufacturer',
       Model: 'Model',
       SerialNumber: 'SerialNumber',
-      ContactSensorState: 'ContactSensorState',
+      On: 'On',
     },
   } as any;
 }
 
 function createMockPlatformAccessory() {
-  let contactValue = 0;
+  let switchValue = true;
   const infoService = {
     setCharacteristic: mock.fn(function (this: any) {
       return this;
     }),
   };
-  const contactService = {
-    getCharacteristic: mock.fn(() => ({ value: contactValue })),
-    updateCharacteristic: mock.fn((_char: any, value: number) => {
-      contactValue = value;
+  const switchService = {
+    getCharacteristic: mock.fn(() => ({ onSet: mock.fn(), value: switchValue })),
+    updateCharacteristic: mock.fn((_char: any, value: boolean) => {
+      switchValue = value;
     }),
   };
 
@@ -50,17 +50,17 @@ function createMockPlatformAccessory() {
         if (type === 'AccessoryInformation') {
           return infoService;
         }
-        if (type === 'ContactSensor') {
-          return contactService;
+        if (type === 'Switch') {
+          return switchService;
         }
         return null;
       },
       addService() {
-        return contactService;
+        return switchService;
       },
     } as any,
-    contactService,
-    getContactValue: () => contactValue,
+    switchService,
+    getSwitchValue: () => switchValue,
   };
 }
 
@@ -71,31 +71,31 @@ describe('HealthCheckAccessory', () => {
     log = createMockLogger();
   });
 
-  it('should start as healthy (CONTACT_DETECTED = 0)', () => {
-    const { accessory, getContactValue } = createMockPlatformAccessory();
+  it('should start as healthy (switch ON)', () => {
+    const { accessory, getSwitchValue } = createMockPlatformAccessory();
     new HealthCheckAccessory(log, createMockHomekit(), accessory);
 
-    assert.strictEqual(getContactValue(), 0);
+    assert.strictEqual(getSwitchValue(), true);
   });
 
-  it('should set CONTACT_NOT_DETECTED (1) when unhealthy', () => {
-    const { accessory, getContactValue } = createMockPlatformAccessory();
+  it('should turn OFF when unhealthy', () => {
+    const { accessory, getSwitchValue } = createMockPlatformAccessory();
     const health = new HealthCheckAccessory(log, createMockHomekit(), accessory);
 
     health.updateHealth(false);
 
-    assert.strictEqual(getContactValue(), 1);
+    assert.strictEqual(getSwitchValue(), false);
   });
 
-  it('should set CONTACT_DETECTED (0) when recovering', () => {
-    const { accessory, getContactValue } = createMockPlatformAccessory();
+  it('should turn ON when recovering', () => {
+    const { accessory, getSwitchValue } = createMockPlatformAccessory();
     const health = new HealthCheckAccessory(log, createMockHomekit(), accessory);
 
     health.updateHealth(false);
-    assert.strictEqual(getContactValue(), 1);
+    assert.strictEqual(getSwitchValue(), false);
 
     health.updateHealth(true);
-    assert.strictEqual(getContactValue(), 0);
+    assert.strictEqual(getSwitchValue(), true);
   });
 
   it('should log warning when unhealthy', () => {
