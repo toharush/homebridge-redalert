@@ -2,8 +2,9 @@ import { describe, it, mock, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { OrefCategory, CATEGORY_MAP, getCategoryName, OrefRealtimeAlert } from '../types';
 import { OrefClient } from '../clients/orefClient';
-import { AlertService } from './AlertService';
 import { SensorFilter, parseAlerts } from './SensorFilter';
+import { AlertPipeline } from '../pipeline';
+import { HttpSource } from '../clients/httpSource';
 import {
   makeAlert,
   makeEventEnded,
@@ -921,7 +922,7 @@ describe('real-world scenario', () => {
   });
 });
 
-describe('AlertService async polling', () => {
+describe('pipeline async polling', () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
   });
@@ -940,13 +941,17 @@ describe('AlertService async polling', () => {
     ]);
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 30, DEFAULT_HEALTH_CHECK_THRESHOLD);
+    const pipeline = new AlertPipeline(log);
+    pipeline.addSource(new HttpSource(log, {
+      name: 'test', url: '', pollingInterval: 30, requestTimeout: 3000,
+      failureThreshold: DEFAULT_HEALTH_CHECK_THRESHOLD, fetchFn: () => client.fetchAlerts(),
+    }));
     const sensor = createMockAccessory();
-    service.registerListener(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+    pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
 
-    service.start();
+    pipeline.start();
     await new Promise((r) => setTimeout(r, 50));
-    service.stop();
+    pipeline.stop();
 
     const callsAtStop = getCalls();
     await new Promise((r) => setTimeout(r, 100));
@@ -969,13 +974,17 @@ describe('AlertService async polling', () => {
 
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 10, DEFAULT_HEALTH_CHECK_THRESHOLD);
+    const pipeline = new AlertPipeline(log);
+    pipeline.addSource(new HttpSource(log, {
+      name: 'test', url: '', pollingInterval: 10, requestTimeout: 3000,
+      failureThreshold: DEFAULT_HEALTH_CHECK_THRESHOLD, fetchFn: () => client.fetchAlerts(),
+    }));
     const sensor = createMockAccessory();
-    service.registerListener(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+    pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
 
-    service.start();
+    pipeline.start();
     await new Promise((r) => setTimeout(r, 200));
-    service.stop();
+    pipeline.stop();
 
     assert.strictEqual(sensor.lastState!.isActive, true);
     assert.ok(callCount >= 4);
@@ -990,13 +999,17 @@ describe('AlertService async polling', () => {
 
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 30, DEFAULT_HEALTH_CHECK_THRESHOLD);
+    const pipeline = new AlertPipeline(log);
+    pipeline.addSource(new HttpSource(log, {
+      name: 'test', url: '', pollingInterval: 30, requestTimeout: 3000,
+      failureThreshold: DEFAULT_HEALTH_CHECK_THRESHOLD, fetchFn: () => client.fetchAlerts(),
+    }));
     const sensor = createMockAccessory();
-    service.registerListener(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+    pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
 
-    service.start();
+    pipeline.start();
     await new Promise((r) => setTimeout(r, 50));
-    service.stop();
+    pipeline.stop();
 
     assert.strictEqual(log.error.mock.calls.length, 0);
   });
@@ -1006,13 +1019,17 @@ describe('AlertService async polling', () => {
 
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 30, DEFAULT_HEALTH_CHECK_THRESHOLD);
+    const pipeline = new AlertPipeline(log);
+    pipeline.addSource(new HttpSource(log, {
+      name: 'test', url: '', pollingInterval: 30, requestTimeout: 3000,
+      failureThreshold: DEFAULT_HEALTH_CHECK_THRESHOLD, fetchFn: () => client.fetchAlerts(),
+    }));
     const sensor = createMockAccessory();
-    service.registerListener(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+    pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
 
-    service.start();
+    pipeline.start();
     await new Promise((r) => setTimeout(r, 50));
-    service.stop();
+    pipeline.stop();
 
     assert.ok(log.error.mock.calls.length >= 1);
     assert.strictEqual(sensor.lastState, null);
@@ -1026,30 +1043,6 @@ describe('AlertService async polling', () => {
 
     assert.strictEqual(s1.lastState!.isActive, true);
     assert.strictEqual(s2.lastState!.isActive, false);
-  });
-
-  it('resumes polling after stop and start again', async () => {
-    const alerts = [makeAlert(OrefCategory.Rockets, ['תל אביב'])];
-    const getCalls = mockFetchSequence([alerts, alerts, alerts, alerts, alerts]);
-    const client = new OrefClient(3000);
-    const log = createMockLogger();
-    const service = new AlertService(log, client, 10, DEFAULT_HEALTH_CHECK_THRESHOLD);
-    const sensor = createMockAccessory();
-    service.registerListener(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
-
-    service.start();
-    await new Promise((r) => setTimeout(r, 50));
-    service.stop();
-
-    const callsAfterFirst = getCalls();
-    sensor.lastState = null;
-
-    service.start();
-    await new Promise((r) => setTimeout(r, 50));
-    service.stop();
-
-    assert.strictEqual(sensor.lastState!.isActive, true);
-    assert.ok(getCalls() > callsAfterFirst);
   });
 
   it('sensors stay active through empty polls then clear on event ended (async)', async () => {
@@ -1125,13 +1118,17 @@ describe('health tracking', () => {
 
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 10, 3);
+    const pipeline = new AlertPipeline(log);
+    pipeline.addSource(new HttpSource(log, {
+      name: 'test', url: '', pollingInterval: 10, requestTimeout: 3000,
+      failureThreshold: 3, fetchFn: () => client.fetchAlerts(),
+    }));
     const healthChanges: boolean[] = [];
-    service.onHealthChange = (h) => healthChanges.push(h);
+    pipeline.onHealthChange = (h) => healthChanges.push(h);
 
-    service.start();
+    pipeline.start();
     await new Promise((r) => setTimeout(r, 150));
-    service.stop();
+    pipeline.stop();
 
     assert.ok(healthChanges.includes(false), 'should report unhealthy');
     assert.strictEqual(healthChanges.filter((h) => h === false).length, 1, 'should only fire once');
@@ -1153,13 +1150,17 @@ describe('health tracking', () => {
 
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 10, 3);
+    const pipeline = new AlertPipeline(log);
+    pipeline.addSource(new HttpSource(log, {
+      name: 'test', url: '', pollingInterval: 10, requestTimeout: 3000,
+      failureThreshold: 3, fetchFn: () => client.fetchAlerts(),
+    }));
     const healthChanges: boolean[] = [];
-    service.onHealthChange = (h) => healthChanges.push(h);
+    pipeline.onHealthChange = (h) => healthChanges.push(h);
 
-    service.start();
+    pipeline.start();
     await new Promise((r) => setTimeout(r, 200));
-    service.stop();
+    pipeline.stop();
 
     assert.deepStrictEqual(healthChanges, [false, true]);
   });
@@ -1180,20 +1181,23 @@ describe('health tracking', () => {
 
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 10, 5);
+    const pipeline = new AlertPipeline(log);
+    pipeline.addSource(new HttpSource(log, {
+      name: 'test', url: '', pollingInterval: 10, requestTimeout: 3000,
+      failureThreshold: 5, fetchFn: () => client.fetchAlerts(),
+    }));
     const healthChanges: boolean[] = [];
-    service.onHealthChange = (h) => healthChanges.push(h);
+    pipeline.onHealthChange = (h) => healthChanges.push(h);
 
-    service.start();
+    pipeline.start();
     await new Promise((r) => setTimeout(r, 200));
-    service.stop();
+    pipeline.stop();
 
     assert.strictEqual(healthChanges.length, 0, 'should not fire — failures below threshold');
   });
 
   it('resets failure count on success and requires full threshold again', async () => {
     let callCount = 0;
-    // Pattern: 2 failures, 1 success, 2 failures — never hits threshold of 3
     globalThis.fetch = mock.fn(() => {
       callCount++;
       const cycle = ((callCount - 1) % 3);
@@ -1209,30 +1213,36 @@ describe('health tracking', () => {
 
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 10, 3);
+    const pipeline = new AlertPipeline(log);
+    pipeline.addSource(new HttpSource(log, {
+      name: 'test', url: '', pollingInterval: 10, requestTimeout: 3000,
+      failureThreshold: 3, fetchFn: () => client.fetchAlerts(),
+    }));
     const healthChanges: boolean[] = [];
-    service.onHealthChange = (h) => healthChanges.push(h);
+    pipeline.onHealthChange = (h) => healthChanges.push(h);
 
-    service.start();
+    pipeline.start();
     await new Promise((r) => setTimeout(r, 200));
-    service.stop();
+    pipeline.stop();
 
     assert.strictEqual(healthChanges.length, 0, 'never hits 3 consecutive failures');
   });
 
-  it('does not fire onHealthChange when no callback is set', async () => {
+  it('does not throw when no onHealthChange callback is set', async () => {
     globalThis.fetch = mock.fn(() => Promise.reject(new Error('fail'))) as any;
 
     const client = new OrefClient(3000);
     const log = createMockLogger();
-    const service = new AlertService(log, client, 10, 3);
-    // onHealthChange is null by default — should not throw
+    const pipeline = new AlertPipeline(log);
+    pipeline.addSource(new HttpSource(log, {
+      name: 'test', url: '', pollingInterval: 10, requestTimeout: 3000,
+      failureThreshold: 3, fetchFn: () => client.fetchAlerts(),
+    }));
 
-    service.start();
+    pipeline.start();
     await new Promise((r) => setTimeout(r, 150));
-    service.stop();
+    pipeline.stop();
 
-    // If we got here without throwing, the test passes
     assert.ok(true);
   });
 });

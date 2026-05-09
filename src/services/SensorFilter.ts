@@ -1,5 +1,6 @@
 import { OrefRealtimeAlert, AlertState, OrefCategory } from '../types';
 import { DebugLogger } from '../utils/debugLogger';
+import { NATIONWIDE_CITY } from '../settings';
 
 export interface CityAlert {
   categoryId: number;
@@ -70,12 +71,15 @@ export class SensorFilter implements AlertListener {
   handleAlerts(parsed: ParsedAlerts): void {
     const { endedCities, relevantCities } = parsed;
 
+    const nationwideEnd = endedCities.has(NATIONWIDE_CITY);
+    const nationwideAlert = this.findNationwideAlert(relevantCities);
+
     for (const configured of this.citySet) {
-      if (this.findMatchInSet(configured, endedCities) && this.activeCities.delete(configured)) {
+      if ((nationwideEnd || this.findMatchInSet(configured, endedCities)) && this.activeCities.delete(configured)) {
         this.log.info(`[${this.name}] Event ended: ${configured}`);
       }
 
-      const title = this.findMatchingAlert(configured, relevantCities);
+      const title = nationwideAlert ?? this.findMatchingAlert(configured, relevantCities);
       if (title) {
         const isNew = !this.activeCities.has(configured);
         this.activeCities.set(configured, Date.now());
@@ -87,6 +91,10 @@ export class SensorFilter implements AlertListener {
 
     this.expireStaleAlerts();
     this.broadcastState();
+  }
+
+  private findNationwideAlert(relevantCities: Map<string, CityAlert[]>): string | undefined {
+    return this.tryMatchCategory(relevantCities.get(NATIONWIDE_CITY));
   }
 
   private findMatchInSet(configured: string, alertCities: Set<string>): boolean {
