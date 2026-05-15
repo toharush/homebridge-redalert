@@ -142,6 +142,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
 
     this.removeStaleAccessories(activeUUIDs);
     pipeline.start();
+    statusService.update(pipeline.getSourceStatus());
     this.log.info('Red Alert is running. You may close the config window.');
   }
 

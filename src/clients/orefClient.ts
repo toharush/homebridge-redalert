@@ -22,7 +22,7 @@ export class OrefClient implements AlertClient {
     }
 
     const raw = await res.text();
-    const cleaned = raw.replace(/^\uFEFF/, '').trim();
+    const cleaned = raw.charCodeAt(0) === 0xFEFF ? raw.slice(1).trim() : raw.trim();
 
     if (!cleaned) {
       return [];

@@ -20,10 +20,16 @@ export class DeduplicationStage implements PipelineStage {
   }
 
   process(alerts: OrefRealtimeAlert[], sourceName?: string): OrefRealtimeAlert[] {
+    if (alerts.length === 0) {
+      this._parsed = null;
+      return alerts;
+    }
+
     const now = Date.now();
+    const cutoff = now - this.windowMs;
 
     if (now - this.lastCleanup > this.windowMs * 2) {
-      this.cleanup(now);
+      this.cleanup(now - this.windowMs * 2);
       this.lastCleanup = now;
     }
 
@@ -31,9 +37,12 @@ export class DeduplicationStage implements PipelineStage {
     let endedCities: Set<string> | null = null;
     let relevantCities: Map<string, CityAlert[]> | null = null;
 
+    let prevCat = '';
+    let catMap: Map<string, number> | undefined;
+
     for (let i = 0; i < alerts.length; i++) {
       const alert = alerts[i];
-      const catId = Number(alert.cat) | 0;
+      const catId = +alert.cat | 0;
 
       if (catId === OrefCategory.EventEnded) {
         (result ??= []).push(alert);
@@ -42,8 +51,8 @@ export class DeduplicationStage implements PipelineStage {
           const city = data[j];
           if (city) {
             (endedCities ??= new Set()).add(city);
-            for (const catMap of this.seen.values()) {
-              catMap.delete(city);
+            for (const cm of this.seen.values()) {
+              cm.delete(city);
             }
           }
         }
@@ -51,10 +60,13 @@ export class DeduplicationStage implements PipelineStage {
       }
 
       const cat = alert.cat;
-      let catMap = this.seen.get(cat);
-      if (!catMap) {
-        catMap = new Map();
-        this.seen.set(cat, catMap);
+      if (cat !== prevCat) {
+        catMap = this.seen.get(cat);
+        if (!catMap) {
+          catMap = new Map();
+          this.seen.set(cat, catMap);
+        }
+        prevCat = cat;
       }
 
       const data = alert.data;
@@ -65,9 +77,9 @@ export class DeduplicationStage implements PipelineStage {
         if (!city) {
           continue;
         }
-        const lastSeen = catMap.get(city);
-        if (lastSeen === undefined || now - lastSeen >= this.windowMs) {
-          catMap.set(city, now);
+        const lastSeen = catMap!.get(city);
+        if (lastSeen === undefined || lastSeen <= cutoff) {
+          catMap!.set(city, now);
           (uniqueCities ??= []).push(city);
 
           const entry: CityAlert = { categoryId: catId, title: alert.title };
@@ -82,11 +94,19 @@ export class DeduplicationStage implements PipelineStage {
       }
 
       if (uniqueCities) {
-        this.history?.add(sourceName ?? 'unknown', cat, alert.title, uniqueCities);
         if (uniqueCities.length === data.length) {
           (result ??= []).push(alert);
         } else {
           (result ??= []).push({ id: alert.id, cat, title: alert.title, data: uniqueCities, desc: alert.desc });
+        }
+      }
+    }
+
+    if (result && this.history) {
+      for (let i = 0; i < result.length; i++) {
+        const a = result[i];
+        if ((+a.cat | 0) !== OrefCategory.EventEnded) {
+          this.history.add(sourceName ?? 'unknown', a.cat, a.title, a.data);
         }
       }
     }
@@ -99,11 +119,10 @@ export class DeduplicationStage implements PipelineStage {
     return result ?? [];
   }
 
-  private cleanup(now: number): void {
-    const cutoff = now - this.windowMs * 2;
+  private cleanup(cutoff: number): void {
     for (const [cat, catMap] of this.seen) {
       for (const [city, timestamp] of catMap) {
-        if (timestamp < cutoff) {
+        if (timestamp <= cutoff) {
           catMap.delete(city);
         }
       }
