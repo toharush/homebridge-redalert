@@ -488,7 +488,7 @@
                   <select class="catmap-value" style="flex:1;padding:4px 8px;border-radius:4px;">
                     ${CATEGORIES.map((c) => `<option value="${c.key}" ${v === c.key ? "selected" : ""}>${c.label}</option>`).join("")}
                   </select>
-                  <button type="button" onclick="this.parentElement.remove();syncConfig();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
+                  <button type="button" onclick="this.parentElement.remove();updateCatmapOptions(this.closest('.category-mapping-rows'));syncConfig();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
                 </div>
               `,
                 )
@@ -526,6 +526,12 @@
       syncConfig();
     });
 
+    const catmapContainer = document.getElementById(`catmap-${id}`);
+    catmapContainer.querySelectorAll(".catmap-value").forEach((sel) => {
+      sel.addEventListener("change", () => { updateCatmapOptions(catmapContainer); syncConfig(); });
+    });
+    updateCatmapOptions(catmapContainer);
+
     saveOnChange();
   }
 
@@ -552,8 +558,34 @@
     syncConfig();
   }
 
+  function getUsedCategories(container, excludeRow) {
+    const used = new Set();
+    container.querySelectorAll(".catmap-row").forEach((row) => {
+      if (row === excludeRow) return;
+      const sel = row.querySelector(".catmap-value");
+      if (sel && sel.value) used.add(sel.value);
+    });
+    return used;
+  }
+
+  function updateCatmapOptions(container) {
+    container.querySelectorAll(".catmap-row").forEach((row) => {
+      const sel = row.querySelector(".catmap-value");
+      if (!sel) return;
+      const current = sel.value;
+      const used = getUsedCategories(container, row);
+      sel.innerHTML = CATEGORIES
+        .filter((c) => c.key === current || !used.has(c.key))
+        .map((c) => `<option value="${c.key}" ${c.key === current ? "selected" : ""}>${c.label}</option>`)
+        .join("");
+    });
+  }
+
   function addCatmapRow(addonId) {
     const container = document.getElementById(`catmap-${addonId}`);
+    const used = getUsedCategories(container, null);
+    const available = CATEGORIES.filter((c) => !used.has(c.key));
+    if (available.length === 0) return;
     const row = document.createElement("div");
     row.className = "catmap-row";
     row.style.cssText =
@@ -562,11 +594,13 @@
       <input type="text" class="catmap-key" value="" placeholder="ID value (e.g. 1, ROCKET)" style="flex:1;padding:4px 8px;border-radius:4px;">
       <span style="color:var(--text-muted);">&#8594;</span>
       <select class="catmap-value" style="flex:1;padding:4px 8px;border-radius:4px;">
-        ${CATEGORIES.map((c) => `<option value="${c.key}">${c.label}</option>`).join("")}
+        ${available.map((c) => `<option value="${c.key}">${c.label}</option>`).join("")}
       </select>
-      <button type="button" onclick="this.parentElement.remove();syncConfig();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
+      <button type="button" onclick="this.parentElement.remove();updateCatmapOptions(this.closest('.category-mapping-rows'));syncConfig();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
     `;
     container.appendChild(row);
+    const sel = row.querySelector(".catmap-value");
+    sel.addEventListener("change", () => { updateCatmapOptions(container); syncConfig(); });
     saveOnChange();
   }
 
