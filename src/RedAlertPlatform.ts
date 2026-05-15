@@ -13,6 +13,7 @@ import { AlertPipeline, DeduplicationStage, AlertHistory } from './pipeline';
 import * as fs from 'fs';
 import * as path from 'path';
 import { SensorFilter } from './services/SensorFilter';
+import { WebhookService, WebhookConfig } from './services/WebhookService';
 import { OrefClient } from './clients/orefClient';
 import { HttpSource, HttpSourceConfig } from './clients/httpSource';
 import { WebSocketSource, WebSocketSourceConfig } from './clients/webSocketSource';
@@ -63,6 +64,8 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     const pingInterval = _.get(config, 'ping_interval', 60000);
     const pongTimeout = _.get(config, 'pong_timeout', 420000);
     const customSources: any[] = _.get(config, 'custom_sources', []);
+    const webhookConfigs: WebhookConfig[] = _.get(config, 'webhooks', []);
+    const webhook = webhookConfigs.length > 0 ? new WebhookService(webhookConfigs, this.log) : null;
 
     this.pipeline = this.buildPipeline(
       pollingInterval, requestTimeout, healthCheckThreshold, customSources,
@@ -73,7 +76,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
 
     this.api.on('didFinishLaunching', () => {
       this.log.easyDebug('Executed didFinishLaunching callback');
-      this.discoverDevices(this.pipeline!, validated.sensors, globalAlertTimeout, turnoffDelay);
+      this.discoverDevices(this.pipeline!, validated.sensors, globalAlertTimeout, turnoffDelay, webhook);
     });
 
     this.api.on('shutdown', () => this.shutdown());
@@ -105,6 +108,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     sensors: SensorConfig[],
     globalAlertTimeout: number,
     turnoffDelay: number,
+    webhook: WebhookService | null,
   ) {
     const activeUUIDs = new Set<string>();
 
@@ -124,7 +128,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       this.sensorAccessories.push(sensorAccessory);
       const filter = new SensorFilter(
         sensor.name, this.log, sensorAccessory, cities,
-        allowedCategories, globalAlertTimeout, prefixMatching, this.history!,
+        allowedCategories, globalAlertTimeout, prefixMatching, this.history!, webhook ?? undefined,
       );
       pipeline.subscribe(filter);
 

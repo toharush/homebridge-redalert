@@ -41,6 +41,8 @@
 - **Onboarding empty state** — Friendly first-run experience guides new users through adding their first sensor.
 - **Category mapping UI** — Custom sources now clearly show how to map source-specific IDs to plugin alert types, with a dedicated "Category ID Field" input.
 - **Prefix matching** — Match sub-areas automatically (e.g. "תל אביב" matches "תל אביב - יפו").
+- **Webhooks** — Fire HTTP POST/PUT to any URL when a sensor activates or deactivates. Payload includes sensor name, city, title, and timestamp. Configure multiple endpoints globally.
+- **Alert history** — Collapsible panel showing the last 20 alerts with source, dedup result, and active/ended status. Active alerts pulse on the coverage map.
 - **Health check accessory** — Optional HomeKit switch that turns OFF when all sources are unreachable.
 - **Automatic config migration** — v1.x comma-separated city strings and `custom_cities` fields are auto-migrated on first launch.
 
@@ -204,6 +206,38 @@ You can add custom HTTP or WebSocket sources via the UI or `config.json`. Custom
 
 `category_field` tells the plugin which JSON field holds the category ID in each alert object (defaults to `"cat"`). Then `category_mapping` maps each ID value from your source to a plugin alert type. For reference: Pikud HaOref uses field `cat` with values `1`=rockets, `6`=uav; Tzofar uses field `threat` with values `0`=rockets, `5`=uav.
 
+### Webhooks
+
+Send an HTTP request when any sensor activates or deactivates. The payload includes the sensor name, city, alert title, event type, and timestamp — route or filter on the receiving end:
+
+```json
+{
+  "platform": "RedAlert",
+  "sensors": [{ "name": "Home", "cities": ["תל אביב - יפו"] }],
+  "webhooks": [
+    {
+      "url": "https://my-server.example.com/alert-hook",
+      "method": "POST",
+      "headers": { "Authorization": "Bearer my-token" }
+    }
+  ]
+}
+```
+
+**Payload format:**
+
+```json
+{
+  "event": "alert",
+  "sensor": "Home",
+  "city": "תל אביב - יפו",
+  "title": "ירי רקטות וטילים",
+  "timestamp": 1700000000000
+}
+```
+
+The `event` field is `"alert"` when a sensor activates and `"ended"` when it deactivates. Multiple webhook URLs can be configured — all fire for every sensor event.
+
 ---
 
 ## Options Reference
@@ -246,6 +280,14 @@ You can add custom HTTP or WebSocket sources via the UI or `config.json`. Custom
 |--------|---------|-------------|
 | `health_check` | `false` | Adds a Switch to HomeKit that turns OFF when all sources are unreachable |
 | `health_check_threshold` | `5` | Consecutive failures per source before reporting unhealthy (2–30) |
+
+### Webhooks
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `url` | Yes | — | The endpoint URL to call on alert/ended events |
+| `method` | No | `POST` | HTTP method (`POST` or `PUT`) |
+| `headers` | No | `{}` | Custom headers (e.g. `{"Authorization": "Bearer ..."}`) |
 
 ### General
 

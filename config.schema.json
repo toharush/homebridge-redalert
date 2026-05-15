@@ -217,6 +217,34 @@
         "description": "When checked, the plugin will produce extra logs for debugging purposes.",
         "type": "boolean",
         "default": false
+      },
+      "webhooks": {
+        "title": "Webhooks",
+        "description": "Send an HTTP request when a sensor activates or deactivates.",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["url"],
+          "properties": {
+            "url": {
+              "title": "URL",
+              "description": "The endpoint to POST to when an alert fires or ends.",
+              "type": "string"
+            },
+            "method": {
+              "title": "HTTP Method",
+              "type": "string",
+              "enum": ["POST", "PUT"],
+              "default": "POST"
+            },
+            "headers": {
+              "title": "Headers",
+              "description": "Custom headers to include (e.g. Authorization).",
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          }
+        }
       }
     }
   },

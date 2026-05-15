@@ -163,16 +163,6 @@
   <div id="addon-sources-container"></div>
   <button class="btn-add" onclick="addAddonSource()">+ Add Source</button>
 
-  <!-- Alert History -->
-  <div class="section-title" style="margin-top: 24px">
-    Alert History
-    <button class="btn-secondary" style="float:right;font-size:0.75em;padding:2px 10px;" onclick="refreshHistory()">Refresh</button>
-  </div>
-  <div id="history-container">
-    <div id="history-empty" class="history-empty">No alerts recorded yet. History appears here once the plugin processes alerts.</div>
-    <div id="history-list"></div>
-  </div>
-
   <!-- Map -->
   <div class="section-title" style="margin-top: 24px">Coverage Map</div>
   <div id="city-map"></div>
@@ -345,9 +335,24 @@
       </div>
     </div>
 
+    <h6 style="margin: 16px 0 8px; color: var(--text-muted)">Webhooks</h6>
+    <div class="field-group">
+      <div class="help-text" style="margin-bottom:8px;">Send an HTTP POST when a sensor activates or deactivates. Payload includes event type, sensor name, city, and title.</div>
+      <div id="webhooks-container"></div>
+      <button type="button" class="btn-secondary" onclick="addWebhook()" style="margin-top:4px;">+ Add Webhook</button>
+    </div>
+
     <h6 style="margin: 16px 0 8px; color: var(--text-muted)">General</h6>
     <div class="field-group">
       <label><input type="checkbox" id="debug" /> Enable Debug Logs</label>
+    </div>
+  </div>
+
+  <!-- Alert History (collapsible, at the end) -->
+  <div id="history-section" style="display:none; margin-top: 20px;">
+    <span class="advanced-toggle" onclick="toggleHistory()">&#9654; Alert History</span>
+    <div id="history-panel" class="history-panel">
+      <div id="history-list"></div>
     </div>
   </div>
 </div>
@@ -415,6 +420,7 @@
     document.getElementById("debug").checked = config.debug ?? false;
 
     addonSources.forEach((s) => renderAddonSource(s));
+    (config.webhooks || []).forEach((h) => renderWebhook(h));
 
     sensors.forEach((s, i) => renderSensor(s, i));
     updateBuiltinCards();
@@ -589,6 +595,51 @@
       sources.push(source);
     });
     return sources;
+  }
+
+  // --- Webhooks ---
+  let webhookCounter = 0;
+
+  function renderWebhook(hook) {
+    const id = webhookCounter++;
+    const container = document.getElementById("webhooks-container");
+    const row = document.createElement("div");
+    row.className = "webhook-row";
+    row.id = `webhook-${id}`;
+    row.innerHTML = `
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+        <input type="text" class="webhook-url" value="${escapeHtml(hook.url || "")}" placeholder="https://example.com/webhook" style="flex:3;padding:4px 8px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);color:var(--text-input);">
+        <select class="webhook-method" style="flex:0.7;padding:4px 8px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);color:var(--text-input);">
+          <option value="POST" ${hook.method === "PUT" ? "" : "selected"}>POST</option>
+          <option value="PUT" ${hook.method === "PUT" ? "selected" : ""}>PUT</option>
+        </select>
+        <input type="text" class="webhook-headers" value="${escapeHtml(JSON.stringify(hook.headers || {}))}" placeholder='{"Authorization":"..."}' style="flex:2;padding:4px 8px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);color:var(--text-input);">
+        <button type="button" onclick="document.getElementById('webhook-${id}').remove();syncConfig();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;">&#215;</button>
+      </div>
+    `;
+    container.appendChild(row);
+    saveOnChange();
+  }
+
+  function addWebhook() {
+    renderWebhook({ url: "", method: "POST", headers: {} });
+    syncConfig();
+  }
+
+  function collectWebhooks() {
+    const rows = document.querySelectorAll(".webhook-row");
+    const hooks = [];
+    rows.forEach((row) => {
+      const url = row.querySelector(".webhook-url").value.trim();
+      if (!url) return;
+      const hook = { url, method: row.querySelector(".webhook-method").value };
+      try {
+        const headers = JSON.parse(row.querySelector(".webhook-headers").value || "{}");
+        if (Object.keys(headers).length > 0) hook.headers = headers;
+      } catch {}
+      hooks.push(hook);
+    });
+    return hooks;
   }
 
   // --- Sensors ---
@@ -779,6 +830,11 @@
       config.custom_sources = customSources;
     }
 
+    const webhooks = collectWebhooks();
+    if (webhooks.length > 0) {
+      config.webhooks = webhooks;
+    }
+
     return config;
   }
 
@@ -896,22 +952,10 @@
     if (!el) return;
     map = L.map("city-map", { scrollWheelZoom: true }).setView(ISRAEL_CENTER, ISRAEL_ZOOM);
 
-    const lightUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-    const darkUrl = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
-    const darkMq = window.matchMedia("(prefers-color-scheme: dark)");
-
-    let tileLayer = L.tileLayer(darkMq.matches ? darkUrl : lightUrl, {
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "&copy; OSM",
       maxZoom: 16,
     }).addTo(map);
-
-    darkMq.addEventListener("change", (e) => {
-      map.removeLayer(tileLayer);
-      tileLayer = L.tileLayer(e.matches ? darkUrl : lightUrl, {
-        attribution: "&copy; OSM",
-        maxZoom: 16,
-      }).addTo(map);
-    });
   }
 
   function getSensorColor(index) {
@@ -1029,15 +1073,15 @@
         const geo = cityGeo.get(cityName);
         if (!geo) return;
 
-        const marker = L.circleMarker([geo.lat, geo.lng], {
-          radius: 12,
-          fillColor: "#ef4444",
-          color: "#ef4444",
-          weight: 2,
-          fillOpacity: 0.4,
-          className: "active-alert-marker",
-        })
-          .bindTooltip(`<strong>${cityName}</strong><br><span style="color:#ef4444;font-size:0.85em">Active Alert</span>`, { direction: "top", offset: [0, -10] })
+        const icon = L.divIcon({
+          className: "pulse-marker",
+          html: '<div class="pulse-ring"></div><div class="pulse-ring pulse-ring-delayed"></div><div class="pulse-core"></div>',
+          iconSize: [40, 40],
+          iconAnchor: [20, 20],
+        });
+
+        const marker = L.marker([geo.lat, geo.lng], { icon })
+          .bindTooltip(`<strong>${cityName}</strong><br><span style="color:#ef4444;font-size:0.85em">Active Alert</span>`, { direction: "top", offset: [0, -20] })
           .addTo(map);
 
         activeMarkers.push(marker);
@@ -1218,20 +1262,29 @@
   }
 
   // --- Alert History ---
+  function toggleHistory() {
+    const panel = document.getElementById("history-panel");
+    const toggle = document.querySelector("#history-section .advanced-toggle");
+    panel.classList.toggle("show");
+    toggle.innerHTML = panel.classList.contains("show")
+      ? "&#9660; Alert History"
+      : "&#9654; Alert History";
+  }
+
   async function refreshHistory() {
     try {
       const entries = await homebridge.request("/history");
+      const section = document.getElementById("history-section");
       const list = document.getElementById("history-list");
-      const empty = document.getElementById("history-empty");
 
       if (!entries || entries.length === 0) {
-        empty.style.display = "block";
-        list.innerHTML = "";
+        section.style.display = "none";
         return;
       }
 
-      empty.style.display = "none";
-      list.innerHTML = entries.map((entry) => {
+      section.style.display = "block";
+      const limited = entries.slice(0, 20);
+      list.innerHTML = limited.map((entry) => {
         const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
         const date = new Date(entry.timestamp).toLocaleDateString([], { day: "2-digit", month: "2-digit" });
         const dedupBadge = entry.dedupResult === "passed"

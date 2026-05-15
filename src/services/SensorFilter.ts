@@ -2,6 +2,7 @@ import { OrefRealtimeAlert, AlertState, OrefCategory } from '../types';
 import { DebugLogger } from '../utils/debugLogger';
 import { NATIONWIDE_CITY } from '../settings';
 import { AlertHistory } from '../pipeline/AlertHistory';
+import { WebhookService } from './WebhookService';
 
 export interface CityAlert {
   categoryId: number;
@@ -56,6 +57,7 @@ export class SensorFilter implements AlertListener {
   private readonly activeCities = new Map<string, number>();
   private readonly maxActiveAgeMs: number;
   private readonly history: AlertHistory | null;
+  private readonly webhook: WebhookService | null;
 
   constructor(
     private readonly name: string,
@@ -66,10 +68,12 @@ export class SensorFilter implements AlertListener {
     alertTimeoutMs: number,
     private readonly prefixMatching: boolean = false,
     history?: AlertHistory,
+    webhook?: WebhookService,
   ) {
     this.citySet = new Set(cities);
     this.maxActiveAgeMs = alertTimeoutMs;
     this.history = history ?? null;
+    this.webhook = webhook ?? null;
   }
 
   handleAlerts(parsed: ParsedAlerts): void {
@@ -82,6 +86,9 @@ export class SensorFilter implements AlertListener {
       if ((nationwideEnd || this.findMatchInSet(configured, endedCities)) && this.activeCities.delete(configured)) {
         this.log.info(`[${this.name}] Event ended: ${configured}`);
         this.history?.markEnded(this.name, configured);
+        this.webhook?.fire({
+          event: 'ended', sensor: this.name, city: configured, title: 'Event Ended', timestamp: Date.now(),
+        });
       }
 
       const title = nationwideAlert ?? this.findMatchingAlert(configured, relevantCities);
@@ -93,6 +100,9 @@ export class SensorFilter implements AlertListener {
           this.history?.add({
             timestamp: Date.now(), source: this.name,
             cat: '', title, cities: [configured], dedupResult: 'passed', status: 'active',
+          });
+          this.webhook?.fire({
+            event: 'alert', sensor: this.name, city: configured, title, timestamp: Date.now(),
           });
         }
       }
