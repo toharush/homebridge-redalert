@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { OrefRealtimeAlert, OrefCategory } from '../types';
 
 const THREAT_TO_CATEGORY: Record<number, number> = {
@@ -56,7 +57,7 @@ function parseAlert(data: any): OrefRealtimeAlert[] {
   }
 
   return [{
-    id: `tzofar-${Date.now()}`,
+    id: `tzofar-${crypto.randomUUID()}`,
     cat: String(category),
     title: `Threat ${data.threat}`,
     data: cities,
@@ -74,7 +75,7 @@ function parseSystemMessage(data: any): OrefRealtimeAlert[] {
   if (isEarlyWarning(data.titleHe, body)) {
     const cities = extractCitiesFromBody(body);
     return [{
-      id: `tzofar-ew-${Date.now()}`,
+      id: `tzofar-ew-${crypto.randomUUID()}`,
       cat: String(OrefCategory.Warning),
       title: data.titleHe || 'Early Warning',
       data: cities.length > 0 ? cities : ['רחבי הארץ'],
@@ -85,7 +86,7 @@ function parseSystemMessage(data: any): OrefRealtimeAlert[] {
   if (isExitNotification(data.titleHe, body)) {
     const cities = extractCitiesFromBody(body);
     return [{
-      id: `tzofar-exit-${Date.now()}`,
+      id: `tzofar-exit-${crypto.randomUUID()}`,
       cat: String(OrefCategory.EventEnded),
       title: data.titleHe || 'Event Ended',
       data: cities.length > 0 ? cities : ['רחבי הארץ'],

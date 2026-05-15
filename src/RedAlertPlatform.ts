@@ -186,7 +186,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
 
     pipeline.addStage(new DeduplicationStage(30000, this.log, this.history, _.get(this.config, 'debug', false)));
 
-    const orefClient = new OrefClient(requestTimeout, this.log);
+    const orefClient = new OrefClient(requestTimeout);
     pipeline.addSource(new HttpSource(this.log, {
       name: 'Pikud HaOref',
       url: '',

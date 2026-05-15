@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { OrefRealtimeAlert } from '../types';
 import { CATEGORY_MAP } from '../types';
 
@@ -34,7 +35,7 @@ export function normalizeAlerts(
     const data: string[] = Array.isArray(cities) ? cities : typeof cities === 'string' ? [cities] : [];
 
     alerts.push({
-      id: String(raw[format.id_field] ?? `${Date.now()}-${Math.random()}`),
+      id: String(raw[format.id_field] ?? crypto.randomUUID()),
       cat: String(mappedCat),
       title: String(raw[format.title_field] ?? ''),
       data,
