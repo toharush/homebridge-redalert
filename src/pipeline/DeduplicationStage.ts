@@ -13,11 +13,11 @@ export class DeduplicationStage implements PipelineStage {
   private readonly debug: boolean;
   private lastCleanup = 0;
 
-  constructor(windowMs: number = 30000, log?: DebugLogger, history?: AlertHistory) {
+  constructor(windowMs: number = 30000, log?: DebugLogger, history?: AlertHistory, debug: boolean = false) {
     this.windowMs = windowMs;
     this.log = log ?? null;
     this.history = history ?? null;
-    this.debug = log !== null;
+    this.debug = debug;
   }
 
   process(alerts: OrefRealtimeAlert[], sourceName?: string): OrefRealtimeAlert[] {

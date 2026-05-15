@@ -39,9 +39,9 @@ export class OrefClient implements AlertClient {
     }
 
     const raw = await res.text();
-    const cleaned = _(raw).replace(/^\uFEFF/, '').trim();
+    const cleaned = raw.replace(/^\uFEFF/, '').trim();
 
-    if (_.isEmpty(cleaned)) {
+    if (!cleaned) {
       return [];
     }
 

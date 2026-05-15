@@ -184,7 +184,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     const pipeline = new AlertPipeline(this.log);
     this.history = new AlertHistory(1000);
 
-    pipeline.addStage(new DeduplicationStage(30000, this.log, this.history));
+    pipeline.addStage(new DeduplicationStage(30000, this.log, this.history, _.get(this.config, 'debug', false)));
 
     const orefClient = new OrefClient(requestTimeout, this.log);
     pipeline.addSource(new HttpSource(this.log, {
@@ -250,8 +250,8 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       }
     }
 
-    const total = 2 + customSources.length;
-    this.log.info(`Alert sources: 2 built-in + ${customSources.length} add-on(s) = ${total} total`);
+    const customCount = pipeline.getSourceStatus().length - 2;
+    this.log.info(`Alert sources: 2 built-in + ${customCount} add-on(s) = ${2 + customCount} total`);
     return pipeline;
   }
 
