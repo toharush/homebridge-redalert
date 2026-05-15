@@ -19,7 +19,7 @@ export class WebhookService {
   private readonly log: DebugLogger;
 
   constructor(configs: WebhookConfig[], log: DebugLogger) {
-    this.configs = configs;
+    this.configs = configs.filter((c) => c.url && c.url.trim().length > 0);
     this.log = log;
   }
 
@@ -38,6 +38,7 @@ export class WebhookService {
         ...config.headers,
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10000),
     }).catch((err) => {
       this.log.error(`[Webhook] Failed to send to ${config.url}: ${err.message}`);
     });

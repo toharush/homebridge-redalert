@@ -777,7 +777,7 @@ describe('edge cases', () => {
     assert.strictEqual(sensor.lastState!.isActive, true);
   });
 
-  it('OrefClient returns empty for malformed JSON', async () => {
+  it('OrefClient throws on malformed JSON', async () => {
     globalThis.fetch = mock.fn(() => Promise.resolve({
       ok: true,
       text: () => Promise.resolve('not valid json{{{'),
@@ -785,14 +785,7 @@ describe('edge cases', () => {
     })) as any;
 
     const client = new OrefClient(3000);
-    const log = createMockLogger();
-    const sensor = createMockAccessory();
-    const filter = new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false);
-
-    const alerts = await client.fetchAlerts();
-    filter.handleAlerts(parseAlerts(alerts));
-
-    assert.strictEqual(sensor.lastState!.isActive, false);
+    await assert.rejects(() => client.fetchAlerts());
   });
 
   it('cat as number instead of string (API inconsistency)', async () => {

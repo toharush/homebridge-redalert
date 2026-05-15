@@ -35,8 +35,7 @@ export class OrefClient implements AlertClient {
     });
 
     if (!res.ok) {
-      this.log?.error(`OREF API returned ${res.status}`);
-      return [];
+      throw new Error(`OREF API returned ${res.status}`);
     }
 
     const raw = await res.text();
@@ -46,19 +45,15 @@ export class OrefClient implements AlertClient {
       return [];
     }
 
-    try {
-      const parsed = JSON.parse(cleaned);
-      const alerts: OrefRealtimeAlert[] = _.isArray(parsed) ? parsed : [parsed];
-      return _.map(
-        alerts,
-        (alert) =>
-          _.toInteger(alert.cat) === OrefCategory.HeadsUpNotice &&
-          EVENT_ENDED_PATTERN.test(alert.title)
-            ? { ...alert, cat: String(OrefCategory.EventEnded) }
-            : alert,
-      );
-    } catch {
-      return [];
-    }
+    const parsed = JSON.parse(cleaned);
+    const alerts: OrefRealtimeAlert[] = _.isArray(parsed) ? parsed : [parsed];
+    return _.map(
+      alerts,
+      (alert) =>
+        _.toInteger(alert.cat) === OrefCategory.HeadsUpNotice &&
+        EVENT_ENDED_PATTERN.test(alert.title)
+          ? { ...alert, cat: String(OrefCategory.EventEnded) }
+          : alert,
+    );
   }
 }

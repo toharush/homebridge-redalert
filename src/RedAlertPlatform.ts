@@ -155,15 +155,22 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
   private writeStatus(): void {
     try {
       const status = this.pipeline?.getSourceStatus() ?? [];
-      fs.writeFileSync(this.statusFilePath, JSON.stringify(status));
+      const tmpStatus = this.statusFilePath + '.tmp';
+      fs.writeFileSync(tmpStatus, JSON.stringify(status));
+      fs.renameSync(tmpStatus, this.statusFilePath);
     } catch {
       // ignore
     }
-    try {
-      const entries = this.history?.getAll() ?? [];
-      fs.writeFileSync(this.historyFilePath, JSON.stringify(entries));
-    } catch {
-      // ignore
+    if (this.history?.isDirty()) {
+      try {
+        const entries = this.history.getAll();
+        const tmpHistory = this.historyFilePath + '.tmp';
+        fs.writeFileSync(tmpHistory, JSON.stringify(entries));
+        fs.renameSync(tmpHistory, this.historyFilePath);
+        this.history.clearDirty();
+      } catch {
+        // ignore
+      }
     }
   }
 
@@ -203,6 +210,9 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     }));
 
     for (const src of customSources) {
+      if (!src.url) {
+        continue;
+      }
       const mapping: CategoryMapping = src.category_mapping ?? {};
       const responseFormat = src.response_format ?? (src.category_field
         ? { ...DEFAULT_RESPONSE_FORMAT, category_field: src.category_field }

@@ -31,9 +31,11 @@
 ## What's New in v2
 
 - **Multi-source alert pipeline** — Alerts stream from Pikud HaOref (HTTP) and Tzofar (WebSocket) simultaneously. Custom HTTP/WebSocket sources can be added via the UI.
-- **Deduplication engine** — Identical alerts from different sources are merged in real-time so sensors only fire once, with debug logs showing which source won each race.
-- **Coverage map** — Interactive Leaflet map in the config UI shows all monitored cities with per-sensor color-coded markers. Supports dark mode tiles.
+- **Sliding-window deduplication** — Identical alerts from different sources are merged using a 30-second sliding window so sensors only fire once, with no boundary edge cases. Debug logs show which source won each race.
+- **Coverage map** — Interactive Leaflet map in the config UI shows all monitored cities with per-sensor color-coded markers.
+- **Active alert overlay** — Pulsing red markers on the map show currently active alerts in real-time. Click an active alert in history to fly to its location.
 - **Live connection status** — Green/red status dots on each built-in source card show real-time connectivity.
+- **Alert history** — Collapsible panel with filters (city, dedup status, active/ended) and configurable item limit. Auto-refreshes every 2 seconds.
 - **Collapsible UI** — Sensors and source cards collapse/expand for a cleaner config experience.
 - **Duplicate sensor** — One-click clone of any sensor to quickly set up multiple locations with similar settings.
 - **Export/Import sensors** — Export sensor config to clipboard as JSON, import from clipboard to quickly share or restore setups.
@@ -41,57 +43,83 @@
 - **Onboarding empty state** — Friendly first-run experience guides new users through adding their first sensor.
 - **Category mapping UI** — Custom sources now clearly show how to map source-specific IDs to plugin alert types, with a dedicated "Category ID Field" input.
 - **Prefix matching** — Match sub-areas automatically (e.g. "תל אביב" matches "תל אביב - יפו").
-- **Webhooks** — Fire HTTP POST/PUT to any URL when a sensor activates or deactivates. Payload includes sensor name, city, title, and timestamp. Configure multiple endpoints globally.
-- **Alert history** — Collapsible panel showing the last 20 alerts with source, dedup result, and active/ended status. Active alerts pulse on the coverage map.
+- **Webhooks** — Fire HTTP POST/PUT to any URL when a sensor activates or deactivates. Payload includes sensor name, city, title, and timestamp. Configure multiple endpoints with a 10-second timeout per request.
 - **Health check accessory** — Optional HomeKit switch that turns OFF when all sources are unreachable.
-- **Automatic config migration** — v1.x comma-separated city strings and `custom_cities` fields are auto-migrated on first launch.
+- **Automatic config migration** — v1.x comma-separated city strings and `custom_cities` fields are auto-migrated atomically on first launch.
+
+---
+
+## v1 vs v2 Comparison
+
+| Metric | v1 | v2 | Notes |
+|--------|----|----|-------|
+| Alert sources | 1 (Pikud HaOref HTTP) | 2+ (HTTP + WebSocket + custom) | Fastest alert wins |
+| Deduplication | None | Sliding 30s window | No duplicate sensor triggers |
+| Network connections | 1 HTTP poll | 1 HTTP poll + 1 WebSocket | +1 persistent connection |
+| Memory overhead | ~2 MB | ~4 MB | +dedup map, history buffer, WebSocket buffers |
+| Dependencies | lodash | lodash + ws | +1 production dep (~200 KB) |
+| Disk I/O | None | Status + history every 5s (only when changed) | Dirty-flag prevents unnecessary writes |
+| Recovery time | Up to polling interval | WebSocket: instant reconnect with backoff; HTTP: next poll cycle | Dual-source redundancy |
+| Test coverage | ~60 tests | 276 tests | 4.6x increase |
+
+**Bottom line:** v2 adds ~2 MB memory and one WebSocket connection. In exchange you get sub-second alert delivery via WebSocket push, source redundancy, cross-source deduplication, and zero duplicate sensor triggers.
 
 ---
 
 ## How It Works
 
 1. The plugin creates one **motion sensor** per configured sensor in HomeKit.
-2. An **alert pipeline** ingests alerts from multiple sources simultaneously — **Pikud HaOref** (HTTP polling) and **Tzofar** (WebSocket push) are built-in. Custom sources can be added.
-3. Alerts pass through a **deduplication stage** so duplicate alerts from different sources are only processed once.
-4. Each sensor independently filters alerts by its own cities and categories.
-5. When an alert matches, the sensor turns **ON**. Nationwide alerts (`רחבי הארץ`) activate all configured cities.
-6. The sensor stays **ON** until an "Event Ended" message is received, or the alert auto-clears after the configured timeout (default: 30 min).
-7. Create HomeKit automations based on each motion sensor (e.g. flash lights, play a sound, send a notification).
+2. An **alert pipeline** ingests alerts from multiple sources simultaneously — **Pikud HaOref** (HTTP polling every 1s) and **Tzofar** (WebSocket push, ~50ms delivery) are built-in. Custom HTTP/WebSocket sources can be added.
+3. Alerts pass through a **sliding-window deduplication stage** — an ID fast-path drops repeated poll responses instantly, then a city-level check (per category, 30s window) ensures cross-source duplicates only fire once.
+4. Each sensor independently filters deduplicated alerts by its configured cities, categories, and optional prefix matching.
+5. When an alert matches, the sensor turns **ON** and webhooks fire. Nationwide alerts (`רחבי הארץ`) activate all configured cities.
+6. The sensor stays **ON** until an "Event Ended" message is received from any source, or the alert auto-clears after the configured timeout (default: 30 min).
+7. A **health check** accessory (optional HomeKit switch) monitors source connectivity and turns OFF when all sources are unreachable.
+8. Create HomeKit automations based on each motion sensor (e.g. flash lights, play a sound, send a notification).
 
 ---
 
 ## Architecture
 
 ```
-┌────────────────┐  ┌──────────────────┐  ┌─────────────────┐
-│  Pikud HaOref  │  │     Tzofar       │  │  Custom Source   │
-│  (HTTP poll)   │  │  (WebSocket)     │  │  (HTTP / WS)    │
-└───────┬────────┘  └────────┬─────────┘  └───────┬─────────┘
-        │                    │                     │
-        └────────────┬───────┴─────────────────────┘
-                     ▼
-            ┌─────────────────┐
-            │  AlertPipeline  │
-            │  (dedup + fan-  │
-            │   out to all    │
-            │   sensors)      │
-            └────────┬────────┘
-                     │
-        ┌────────────┼─────────────┐
-        ▼            ▼             ▼
-  ┌───────────┐ ┌───────────┐ ┌───────────┐
-  │ Sensor A  │ │ Sensor B  │ │ Sensor C  │
-  │ (filter)  │ │ (filter)  │ │ (filter)  │
-  └─────┬─────┘ └─────┬─────┘ └─────┬─────┘
-        ▼             ▼             ▼
-  ┌───────────┐ ┌───────────┐ ┌───────────┐
-  │  HomeKit  │ │  HomeKit  │ │  HomeKit  │
-  │  Motion   │ │  Motion   │ │  Motion   │
-  │  Sensor   │ │  Sensor   │ │  Sensor   │
-  └───────────┘ └───────────┘ └───────────┘
+┌────────────────┐  ┌────────────────┐  ┌────────────────┐
+│  Pikud HaOref  │  │     Tzofar     │  │ Custom Source  │
+│  (HTTP poll)   │  │  (WebSocket)   │  │  (HTTP / WS)  │
+└───────┬────────┘  └───────┬────────┘  └───────┬────────┘
+        │                   │                    │
+        └───────────────────┼────────────────────┘
+                            ▼
+              ┌──────────────────────────┐
+              │      AlertPipeline       │
+              │                          │
+              │  ┌────────────────────┐  │
+              │  │   Deduplication    │  │──▶ AlertHistory
+              │  │  (30s sliding window) │
+              │  └─────────┬──────────┘  │
+              │            │             │
+              │  ┌─────────┴──────────┐  │
+              │  │  Fan-out to all    │  │
+              │  │  sensors           │  │
+              │  └─────────┬──────────┘  │
+              └────────────┼─────────────┘
+                           │
+          ┌────────────────┼────────────────┐
+          ▼                ▼                ▼
+    ┌───────────┐   ┌───────────┐   ┌───────────┐
+    │ Sensor A  │   │ Sensor B  │   │ Sensor C  │
+    │  filter   │   │  filter   │   │  filter   │
+    └─────┬─────┘   └─────┬─────┘   └─────┬─────┘
+          │                │                │
+     ┌────┴────┐      ┌────┴────┐      ┌────┴────┐
+     ▼         ▼      ▼         ▼      ▼         ▼
+ ┌───────┐ ┌──────┐ ┌───────┐ ┌──────┐ ┌───────┐ ┌──────┐
+ │HomeKit│ │Weber │ │HomeKit│ │Weber │ │HomeKit│ │Weber │
+ │Motion │ │hook  │ │Motion │ │hook  │ │Motion │ │hook  │
+ │Sensor │ │(POST)│ │Sensor │ │(POST)│ │Sensor │ │(POST)│
+ └───────┘ └──────┘ └───────┘ └──────┘ └───────┘ └──────┘
 ```
 
-Adding sensors does **not** add API calls — all sensors share the same pipeline.
+Adding sensors does **not** add API calls — all sensors share the same pipeline. The deduplication stage ensures each city/category combination only triggers once per 30-second window, regardless of how many sources report it.
 
 ---
 

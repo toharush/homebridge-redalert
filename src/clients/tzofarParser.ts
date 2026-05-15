@@ -50,6 +50,8 @@ function parseAlert(data: any): OrefRealtimeAlert[] {
 
   const category = THREAT_TO_CATEGORY[data.threat];
   if (category === undefined) {
+    // eslint-disable-next-line no-console
+    console.warn(`[Tzofar] Unknown threat type ${data.threat} for cities: ${cities.join(', ')}`);
     return [];
   }
 

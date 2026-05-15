@@ -77,7 +77,9 @@ export function migrateConfig(configPath: string, log: Logger): void {
   }
 
   try {
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 4), 'utf-8');
+    const tmpPath = configPath + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(config, null, 4), 'utf-8');
+    fs.renameSync(tmpPath, configPath);
     log.info('Config migrated: cities converted from string to array format');
   } catch (err) {
     log.warn(`Failed to write migrated config: ${err}`);

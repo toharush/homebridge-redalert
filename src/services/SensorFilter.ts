@@ -97,10 +97,6 @@ export class SensorFilter implements AlertListener {
         this.activeCities.set(configured, Date.now());
         if (isNew) {
           this.log.info(`[${this.name}] ALERT: ${title} - ${configured}`);
-          this.history?.add({
-            timestamp: Date.now(), source: this.name,
-            cat: '', title, cities: [configured], dedupResult: 'passed', status: 'active',
-          });
           this.webhook?.fire({
             event: 'alert', sensor: this.name, city: configured, title, timestamp: Date.now(),
           });

@@ -75,6 +75,13 @@ export class WebSocketSource implements AlertSource {
       return;
     }
 
+    if (this.ws) {
+      this.ws.removeAllListeners();
+      this.ws.on('error', () => {});
+      this.ws.terminate();
+      this.ws = null;
+    }
+
     this.ws = new WebSocket(this.config.url, {
       headers: this.config.headers,
     });

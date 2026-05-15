@@ -87,7 +87,7 @@ function createMockAPI() {
       }
     },
     _registered: registered,
-    user: { configPath: () => '/tmp/test-config.json' },
+    user: { configPath: () => '/tmp/test-config.json', storagePath: () => '/tmp' },
   };
 }
 
