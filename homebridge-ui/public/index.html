@@ -378,6 +378,7 @@
     { key: "terror", label: "Terrorist Infiltration (חדירת מחבלים)" },
     { key: "tsunami", label: "Tsunami (צונאמי)" },
     { key: "hazmat", label: "Hazardous Materials (חומרים מסוכנים)" },
+    { key: "eventended", label: "Event Ended (האירוע הסתיים)" },
   ];
 
   const CATEGORY_KEYS = CATEGORIES.map((c) => c.key);
@@ -438,70 +439,77 @@
     card.className = "source-card addon";
     card.id = `addon-source-${id}`;
 
+    const displayName = source.name || "Custom Source";
+    const typeLabel = source.type === "websocket" ? "WebSocket" : "HTTP";
+    const urlHost = (() => { try { return new URL(source.url || "").host; } catch { return source.url || ""; } })();
+
     card.innerHTML = `
-      <div class="source-header">
-        <h6>${escapeHtml(source.name || "Custom Source")} <span class="source-badge">Add-on</span></h6>
+      <div class="source-header" onclick="toggleAddonSource(${id}, event)">
+        <h6><span class="source-chevron">&#9654;</span>${escapeHtml(displayName)} <span class="source-badge">Add-on</span></h6>
         <button class="btn-remove" onclick="removeAddonSource(${id})">Remove</button>
       </div>
-      <div class="source-fields">
-        <div class="field-group">
-          <label>Name</label>
-          <input type="text" class="addon-name" value="${escapeHtml(source.name || "")}" placeholder="e.g. My Alert API">
-        </div>
-        <div class="field-group">
-          <label>Type</label>
-          <select class="addon-type">
-            <option value="http" ${source.type === "http" ? "selected" : ""}>HTTP</option>
-            <option value="websocket" ${source.type === "websocket" ? "selected" : ""}>WebSocket</option>
-          </select>
-        </div>
-        <div class="field-group">
-          <label>URL</label>
-          <input type="text" class="addon-url" value="${escapeHtml(source.url || "")}" placeholder="https:// or wss://">
-        </div>
-        <div class="field-group">
-          <label>Category Mapping</label>
-          <div class="help-text" style="margin-bottom:8px;">
-            Which field in the source's response holds the category ID?
-            Then map each ID value to a plugin alert type.<br>
-            Example: Pikud HaOref uses field <code>cat</code> with values like <code>1</code> = rockets, <code>6</code> = uav.
+      <div class="source-info">${typeLabel} &bull; ${escapeHtml(urlHost)}</div>
+      <div class="source-details" id="addon-details-${id}">
+        <div class="source-fields">
+          <div class="field-group">
+            <label>Name</label>
+            <input type="text" class="addon-name" value="${escapeHtml(source.name || "")}" placeholder="e.g. My Alert API">
           </div>
-          <div style="margin-bottom:8px;">
-            <label style="font-weight:500;font-size:0.85em;">Category ID Field (required)</label>
-            <input type="text" class="addon-cat-field" value="${escapeHtml(source.category_field || "cat")}" placeholder="e.g. cat, threat, type">
-            <div class="help-text">The JSON field name in each alert object that contains the category ID.</div>
+          <div class="field-group">
+            <label>Type</label>
+            <select class="addon-type">
+              <option value="http" ${source.type === "http" ? "selected" : ""}>HTTP</option>
+              <option value="websocket" ${source.type === "websocket" ? "selected" : ""}>WebSocket</option>
+            </select>
           </div>
-          <div class="category-mapping-rows" id="catmap-${id}">
-            ${Object.entries(source.category_mapping || {})
-              .map(
-                ([k, v]) => `
-              <div class="catmap-row" style="display:flex;gap:6px;margin-bottom:4px;align-items:center;">
-                <input type="text" class="catmap-key" value="${escapeHtml(k)}" placeholder="ID value (e.g. 1, ROCKET)" style="flex:1;padding:4px 8px;border-radius:4px;">
-                <span style="color:var(--text-muted);">&#8594;</span>
-                <select class="catmap-value" style="flex:1;padding:4px 8px;border-radius:4px;">
-                  ${CATEGORIES.map((c) => `<option value="${c.key}" ${v === c.key ? "selected" : ""}>${c.label}</option>`).join("")}
-                </select>
-                <button type="button" onclick="this.parentElement.remove();syncConfig();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
-              </div>
-            `,
-              )
-              .join("")}
+          <div class="field-group">
+            <label>URL</label>
+            <input type="text" class="addon-url" value="${escapeHtml(source.url || "")}" placeholder="https:// or wss://">
           </div>
-          <button type="button" onclick="addCatmapRow(${id})" style="font-size:0.8em;background:none;border:1px solid var(--border-input);border-radius:4px;padding:2px 10px;cursor:pointer;margin-top:4px;">+ Add mapping</button>
-        </div>
-        <div class="field-group">
-          <label>Headers (JSON, optional)</label>
-          <input type="text" class="addon-headers" value="${escapeHtml(JSON.stringify(source.headers || {}))}" placeholder='{"Authorization":"Bearer ..."}'>
-        </div>
-        <div class="field-group addon-ws-fields" style="${source.type === "websocket" ? "" : "display:none"}">
-          <label>Message Type Filter (optional)</label>
-          <input type="text" class="addon-message-type" value="${escapeHtml(source.message_type || "")}" placeholder="e.g. ALERT">
-          <div class="help-text">Only process WebSocket messages with this type field.</div>
-        </div>
-        <div class="field-group addon-ws-fields" style="${source.type === "websocket" ? "" : "display:none"}">
-          <label>Message Data Field (optional)</label>
-          <input type="text" class="addon-message-data-field" value="${escapeHtml(source.message_data_field || "")}" placeholder="e.g. data">
-          <div class="help-text">Extract alert data from this field of the message.</div>
+          <div class="field-group">
+            <label>Category Mapping</label>
+            <div class="help-text" style="margin-bottom:8px;">
+              Which field in the source's response holds the category ID?
+              Then map each ID value to a plugin alert type.<br>
+              Example: Pikud HaOref uses field <code>cat</code> with values like <code>1</code> = rockets, <code>6</code> = uav.
+            </div>
+            <div style="margin-bottom:8px;">
+              <label style="font-weight:500;font-size:0.85em;">Category ID Field (required)</label>
+              <input type="text" class="addon-cat-field" value="${escapeHtml(source.category_field || "cat")}" placeholder="e.g. cat, threat, type">
+              <div class="help-text">The JSON field name in each alert object that contains the category ID.</div>
+            </div>
+            <div class="category-mapping-rows" id="catmap-${id}">
+              ${Object.entries(source.category_mapping || {})
+                .map(
+                  ([k, v]) => `
+                <div class="catmap-row" style="display:flex;gap:6px;margin-bottom:4px;align-items:center;">
+                  <input type="text" class="catmap-key" value="${escapeHtml(k)}" placeholder="ID value (e.g. 1, ROCKET)" style="flex:1;padding:4px 8px;border-radius:4px;">
+                  <span style="color:var(--text-muted);">&#8594;</span>
+                  <select class="catmap-value" style="flex:1;padding:4px 8px;border-radius:4px;">
+                    ${CATEGORIES.map((c) => `<option value="${c.key}" ${v === c.key ? "selected" : ""}>${c.label}</option>`).join("")}
+                  </select>
+                  <button type="button" onclick="this.parentElement.remove();syncConfig();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
+                </div>
+              `,
+                )
+                .join("")}
+            </div>
+            <button type="button" onclick="addCatmapRow(${id})" style="font-size:0.8em;background:none;border:1px solid var(--border-input);border-radius:4px;padding:2px 10px;cursor:pointer;margin-top:4px;">+ Add mapping</button>
+          </div>
+          <div class="field-group">
+            <label>Headers (JSON, optional)</label>
+            <input type="text" class="addon-headers" value="${escapeHtml(JSON.stringify(source.headers || {}))}" placeholder='{"Authorization":"Bearer ..."}'>
+          </div>
+          <div class="field-group addon-ws-fields" style="${source.type === "websocket" ? "" : "display:none"}">
+            <label>Message Type Filter (optional)</label>
+            <input type="text" class="addon-message-type" value="${escapeHtml(source.message_type || "")}" placeholder="e.g. ALERT">
+            <div class="help-text">Only process WebSocket messages with this type field.</div>
+          </div>
+          <div class="field-group addon-ws-fields" style="${source.type === "websocket" ? "" : "display:none"}">
+            <label>Message Data Field (optional)</label>
+            <input type="text" class="addon-message-data-field" value="${escapeHtml(source.message_data_field || "")}" placeholder="e.g. data">
+            <div class="help-text">Extract alert data from this field of the message.</div>
+          </div>
         </div>
       </div>
     `;
@@ -519,6 +527,14 @@
     });
 
     saveOnChange();
+  }
+
+  function toggleAddonSource(id, event) {
+    if (event.target.closest(".btn-remove")) return;
+    const card = document.getElementById(`addon-source-${id}`);
+    const details = document.getElementById(`addon-details-${id}`);
+    card.classList.toggle("expanded");
+    details.classList.toggle("show");
   }
 
   function addAddonSource() {

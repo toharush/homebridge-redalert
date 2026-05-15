@@ -324,14 +324,16 @@
   margin-bottom: 10px;
 }
 
-.source-card.builtin {
+.source-card.builtin,
+.source-card.addon {
   background: var(--bg-secondary);
   border-color: var(--border-builtin);
   cursor: pointer;
   transition: border-color 0.2s ease;
 }
 
-.source-card.builtin:hover {
+.source-card.builtin:hover,
+.source-card.addon:hover {
   border-color: var(--text-muted);
 }
 
@@ -472,7 +474,8 @@
   margin-right: 6px;
 }
 
-.source-card.builtin.expanded .source-chevron {
+.source-card.builtin.expanded .source-chevron,
+.source-card.addon.expanded .source-chevron {
   transform: rotate(90deg);
 }
 

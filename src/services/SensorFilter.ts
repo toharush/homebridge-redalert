@@ -147,7 +147,7 @@ export class SensorFilter implements AlertListener {
     }
     for (const { categoryId, title } of entries) {
       if (this.allowedCategories.has(categoryId)) {
-        return title;
+        return title || 'Alert';
       }
     }
     return undefined;

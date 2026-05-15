@@ -27,6 +27,7 @@ export const CATEGORY_MAP: Record<string, number[]> = {
   terror: [OrefCategory.TerroristInfiltration],
   tsunami: [OrefCategory.Tsunami],
   hazmat: [OrefCategory.HazardousMaterials],
+  eventended: [OrefCategory.EventEnded],
 };
 
 export const ALL_CATEGORY_KEYS = Object.keys(CATEGORY_MAP);

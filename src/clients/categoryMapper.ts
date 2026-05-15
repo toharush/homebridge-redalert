@@ -4,7 +4,8 @@ import { CATEGORY_MAP } from '../types';
 
 export type CategoryKey =
   | 'rockets' | 'uav' | 'nonconventional' | 'warning'
-  | 'earthquake' | 'cbrne' | 'terror' | 'tsunami' | 'hazmat';
+  | 'earthquake' | 'cbrne' | 'terror' | 'tsunami' | 'hazmat'
+  | 'eventended';
 
 export type CategoryMapping = Record<string, CategoryKey>;
 
