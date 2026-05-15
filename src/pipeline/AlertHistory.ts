@@ -5,6 +5,7 @@ export interface AlertHistoryEntry {
   title: string;
   cities: string[];
   dedupResult: 'passed' | 'dropped';
+  status?: 'active' | 'ended';
 }
 
 export class AlertHistory {
@@ -20,6 +21,16 @@ export class AlertHistory {
     if (this.entries.length > this.maxSize) {
       this.entries.length = this.maxSize;
     }
+  }
+
+  markEnded(source: string, city: string): boolean {
+    for (const entry of this.entries) {
+      if (entry.source === source && entry.status === 'active' && entry.cities.includes(city)) {
+        entry.status = 'ended';
+        return true;
+      }
+    }
+    return false;
   }
 
   getAll(): AlertHistoryEntry[] {

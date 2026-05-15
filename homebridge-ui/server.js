@@ -11,6 +11,7 @@ class RedAlertUiServer extends HomebridgePluginUiServer {
     this.onRequest('/cities', this.getCities.bind(this));
     this.onRequest('/config', this.getConfig.bind(this));
     this.onRequest('/status', this.getStatus.bind(this));
+    this.onRequest('/history', this.getHistory.bind(this));
     this.ready();
   }
 
@@ -54,6 +55,16 @@ class RedAlertUiServer extends HomebridgePluginUiServer {
       return data;
     } catch {
       return null;
+    }
+  }
+
+  async getHistory() {
+    try {
+      const historyPath = path.resolve(this.homebridgeStoragePath, 'redalert-history.json');
+      const data = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+      return data;
+    } catch {
+      return [];
     }
   }
 }

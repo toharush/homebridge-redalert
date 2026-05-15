@@ -1,6 +1,7 @@
 import { OrefRealtimeAlert, AlertState, OrefCategory } from '../types';
 import { DebugLogger } from '../utils/debugLogger';
 import { NATIONWIDE_CITY } from '../settings';
+import { AlertHistory } from '../pipeline/AlertHistory';
 
 export interface CityAlert {
   categoryId: number;
@@ -54,6 +55,7 @@ export class SensorFilter implements AlertListener {
   private readonly citySet: Set<string>;
   private readonly activeCities = new Map<string, number>();
   private readonly maxActiveAgeMs: number;
+  private readonly history: AlertHistory | null;
 
   constructor(
     private readonly name: string,
@@ -63,9 +65,11 @@ export class SensorFilter implements AlertListener {
     private readonly allowedCategories: Set<number>,
     alertTimeoutMs: number,
     private readonly prefixMatching: boolean = false,
+    history?: AlertHistory,
   ) {
     this.citySet = new Set(cities);
     this.maxActiveAgeMs = alertTimeoutMs;
+    this.history = history ?? null;
   }
 
   handleAlerts(parsed: ParsedAlerts): void {
@@ -77,6 +81,7 @@ export class SensorFilter implements AlertListener {
     for (const configured of this.citySet) {
       if ((nationwideEnd || this.findMatchInSet(configured, endedCities)) && this.activeCities.delete(configured)) {
         this.log.info(`[${this.name}] Event ended: ${configured}`);
+        this.history?.markEnded(this.name, configured);
       }
 
       const title = nationwideAlert ?? this.findMatchingAlert(configured, relevantCities);
@@ -85,6 +90,10 @@ export class SensorFilter implements AlertListener {
         this.activeCities.set(configured, Date.now());
         if (isNew) {
           this.log.info(`[${this.name}] ALERT: ${title} - ${configured}`);
+          this.history?.add({
+            timestamp: Date.now(), source: this.name,
+            cat: '', title, cities: [configured], dedupResult: 'passed', status: 'active',
+          });
         }
       }
     }

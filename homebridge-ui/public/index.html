@@ -163,6 +163,16 @@
   <div id="addon-sources-container"></div>
   <button class="btn-add" onclick="addAddonSource()">+ Add Source</button>
 
+  <!-- Alert History -->
+  <div class="section-title" style="margin-top: 24px">
+    Alert History
+    <button class="btn-secondary" style="float:right;font-size:0.75em;padding:2px 10px;" onclick="refreshHistory()">Refresh</button>
+  </div>
+  <div id="history-container">
+    <div id="history-empty" class="history-empty">No alerts recorded yet. History appears here once the plugin processes alerts.</div>
+    <div id="history-list"></div>
+  </div>
+
   <!-- Map -->
   <div class="section-title" style="margin-top: 24px">Coverage Map</div>
   <div id="city-map"></div>
@@ -989,6 +999,54 @@
     }
   }
 
+  // --- Active Alerts on Map ---
+  let activeMarkers = [];
+
+  async function updateActiveAlerts() {
+    if (!map) return;
+    activeMarkers.forEach((m) => map.removeLayer(m));
+    activeMarkers = [];
+
+    try {
+      const entries = await homebridge.request("/history");
+      if (!entries || !Array.isArray(entries)) return;
+
+      const activeCities = new Set();
+      for (const entry of entries) {
+        if (entry.status === "active") {
+          entry.cities.forEach((c) => activeCities.add(c));
+        }
+      }
+
+      if (activeCities.size === 0) return;
+
+      const cityGeo = new Map();
+      cities.forEach((c) => {
+        if (c.lat && c.lng) cityGeo.set(c.name, { lat: c.lat, lng: c.lng });
+      });
+
+      activeCities.forEach((cityName) => {
+        const geo = cityGeo.get(cityName);
+        if (!geo) return;
+
+        const marker = L.circleMarker([geo.lat, geo.lng], {
+          radius: 12,
+          fillColor: "#ef4444",
+          color: "#ef4444",
+          weight: 2,
+          fillOpacity: 0.4,
+          className: "active-alert-marker",
+        })
+          .bindTooltip(`<strong>${cityName}</strong><br><span style="color:#ef4444;font-size:0.85em">Active Alert</span>`, { direction: "top", offset: [0, -10] })
+          .addTo(map);
+
+        activeMarkers.push(marker);
+      });
+    } catch {
+      // silent
+    }
+  }
+
   // --- Export / Import Sensors ---
   function exportSensors() {
     const config = collectConfig();
@@ -1159,11 +1217,60 @@
     el.title = titles[state] || "Unknown";
   }
 
+  // --- Alert History ---
+  async function refreshHistory() {
+    try {
+      const entries = await homebridge.request("/history");
+      const list = document.getElementById("history-list");
+      const empty = document.getElementById("history-empty");
+
+      if (!entries || entries.length === 0) {
+        empty.style.display = "block";
+        list.innerHTML = "";
+        return;
+      }
+
+      empty.style.display = "none";
+      list.innerHTML = entries.map((entry) => {
+        const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        const date = new Date(entry.timestamp).toLocaleDateString([], { day: "2-digit", month: "2-digit" });
+        const dedupBadge = entry.dedupResult === "passed"
+          ? `<span class="history-badge badge-passed">passed</span>`
+          : `<span class="history-badge badge-dropped">dropped</span>`;
+        const statusBadge = entry.status === "active"
+          ? `<span class="history-badge badge-active">active</span>`
+          : entry.status === "ended"
+            ? `<span class="history-badge badge-ended">ended</span>`
+            : "";
+        const badge = dedupBadge + statusBadge;
+        const cities = entry.cities.join(", ");
+        return `<div class="history-row">
+          <div class="history-row-top">
+            <span class="history-time">${date} ${time}</span>
+            <span class="history-source">${escapeHtml(entry.source)}</span>
+            ${badge}
+          </div>
+          <div class="history-row-bottom">
+            <span class="history-title">${escapeHtml(entry.title || "cat " + entry.cat)}</span>
+            <span class="history-cities">${escapeHtml(cities)}</span>
+          </div>
+        </div>`;
+      }).join("");
+    } catch {
+      // silent
+    }
+  }
+
   init().then(() => {
     initMap();
     updateMapMarkers();
     updateEmptyState();
     pollStatus();
-    statusInterval = setInterval(pollStatus, 10000);
+    refreshHistory();
+    updateActiveAlerts();
+    statusInterval = setInterval(() => {
+      pollStatus();
+      updateActiveAlerts();
+    }, 10000);
   });
 </script>

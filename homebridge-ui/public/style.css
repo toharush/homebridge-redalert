@@ -545,6 +545,16 @@
   padding: 20px;
 }
 
+/* Active alert pulsing markers */
+.active-alert-marker {
+  animation: pulse-alert 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-alert {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.9; }
+}
+
 /* Empty state */
 .empty-state {
   text-align: center;
@@ -617,4 +627,118 @@
 
 .input-error {
   border-color: var(--accent-red) !important;
+}
+
+/* Alert History */
+#history-container {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.history-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+
+.history-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.history-row:last-child {
+  border-bottom: none;
+}
+
+.history-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.history-time {
+  font-size: 0.78em;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
+.history-source {
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.history-badge {
+  font-size: 0.7em;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.badge-passed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-dropped {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge-active {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-ended {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+@media (prefers-color-scheme: dark) {
+  .badge-passed {
+    background: #14532d;
+    color: #86efac;
+  }
+
+  .badge-dropped {
+    background: #450a0a;
+    color: #fca5a5;
+  }
+
+  .badge-active {
+    background: #451a03;
+    color: #fcd34d;
+  }
+
+  .badge-ended {
+    background: #1e1b4b;
+    color: #a5b4fc;
+  }
+}
+
+.history-row-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-title {
+  font-size: 0.82em;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.history-cities {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

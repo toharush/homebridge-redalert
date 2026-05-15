@@ -30,8 +30,10 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
   private readonly cachedAccessories: Map<string, PlatformAccessory> = new Map();
   private readonly sensorAccessories: MotionSensorAccessory[] = [];
   private pipeline: AlertPipeline | null = null;
+  private history: AlertHistory | null = null;
   private statusTimer: ReturnType<typeof setInterval> | null = null;
   private readonly statusFilePath: string;
+  private readonly historyFilePath: string;
 
   constructor(
     logger: Logger,
@@ -42,6 +44,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     this.Characteristic = api.hap.Characteristic;
     this.log = createDebugLogger(logger, _.get(config, 'debug', false));
     this.statusFilePath = path.join(api.user.storagePath(), 'redalert-status.json');
+    this.historyFilePath = path.join(api.user.storagePath(), 'redalert-history.json');
 
     migrateConfig(api.user.configPath(), this.log);
 
@@ -121,7 +124,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       this.sensorAccessories.push(sensorAccessory);
       const filter = new SensorFilter(
         sensor.name, this.log, sensorAccessory, cities,
-        allowedCategories, globalAlertTimeout, prefixMatching,
+        allowedCategories, globalAlertTimeout, prefixMatching, this.history!,
       );
       pipeline.subscribe(filter);
 
@@ -152,6 +155,12 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     } catch {
       // ignore
     }
+    try {
+      const entries = this.history?.getAll() ?? [];
+      fs.writeFileSync(this.historyFilePath, JSON.stringify(entries));
+    } catch {
+      // ignore
+    }
   }
 
   private buildPipeline(
@@ -162,9 +171,9 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     ws: { reconnectInterval: number; maxReconnectInterval: number; pingInterval: number; pongTimeout: number },
   ): AlertPipeline {
     const pipeline = new AlertPipeline(this.log);
-    const history = new AlertHistory(50);
+    this.history = new AlertHistory(1000);
 
-    pipeline.addStage(new DeduplicationStage(30000, this.log, history));
+    pipeline.addStage(new DeduplicationStage(30000, this.log, this.history));
 
     const orefClient = new OrefClient(requestTimeout, this.log);
     pipeline.addSource(new HttpSource(this.log, {
