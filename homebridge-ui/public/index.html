@@ -494,7 +494,7 @@
                 )
                 .join("")}
             </div>
-            <button type="button" onclick="addCatmapRow(${id})" style="font-size:0.8em;background:none;border:1px solid var(--border-input);border-radius:4px;padding:2px 10px;cursor:pointer;margin-top:4px;">+ Add mapping</button>
+            <button type="button" id="addmap-btn-${id}" onclick="addCatmapRow(${id})" style="font-size:0.8em;background:none;border:1px solid var(--border-input);color:var(--text-primary);border-radius:4px;padding:2px 10px;cursor:pointer;margin-top:4px;">+ Add mapping</button>
           </div>
           <div class="field-group">
             <label>Headers (JSON, optional)</label>
@@ -569,6 +569,7 @@
   }
 
   function updateCatmapOptions(container) {
+    const allUsed = getUsedCategories(container, null);
     container.querySelectorAll(".catmap-row").forEach((row) => {
       const sel = row.querySelector(".catmap-value");
       if (!sel) return;
@@ -579,6 +580,11 @@
         .map((c) => `<option value="${c.key}" ${c.key === current ? "selected" : ""}>${c.label}</option>`)
         .join("");
     });
+    const addonId = container.id.replace("catmap-", "");
+    const addBtn = document.getElementById(`addmap-btn-${addonId}`);
+    if (addBtn) {
+      addBtn.style.display = allUsed.size >= CATEGORIES.length ? "none" : "";
+    }
   }
 
   function addCatmapRow(addonId) {
@@ -601,6 +607,7 @@
     container.appendChild(row);
     const sel = row.querySelector(".catmap-value");
     sel.addEventListener("change", () => { updateCatmapOptions(container); syncConfig(); });
+    updateCatmapOptions(container);
     saveOnChange();
   }
 

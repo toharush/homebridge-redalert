@@ -396,6 +396,7 @@
 
 .source-details.show {
   max-height: 800px;
+  overflow-y: auto;
   margin-top: 10px;
   border-top-color: var(--border-primary);
   padding-top: 8px;
