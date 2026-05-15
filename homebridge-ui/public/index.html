@@ -179,22 +179,6 @@
   <div id="sensors-container"></div>
   <div id="sensors-actions-bar" class="sensor-actions">
     <button class="btn-add" onclick="addSensor()">+ Add Sensor</button>
-    <div class="sensor-actions-right">
-      <button class="btn-secondary" onclick="exportSensors()">Export</button>
-      <button class="btn-secondary" onclick="showImportModal()">Import</button>
-    </div>
-  </div>
-
-  <!-- Import Modal -->
-  <div id="import-modal" class="import-modal-overlay" style="display:none">
-    <div class="import-modal">
-      <h6 style="margin:0 0 8px">Import Sensors</h6>
-      <p style="font-size:0.85em;color:var(--text-muted);margin:0 0 8px">Paste a JSON array of sensor objects below. Each sensor must have <code>name</code> and <code>cities</code> fields.</p>
-      <textarea id="import-textarea" rows="8" placeholder='[{"name":"Home","cities":["תל אביב - יפו"]}]'></textarea>
-      <div class="import-modal-buttons">
-        <button class="btn-secondary" onclick="hideImportModal()">Cancel</button>
-        <button class="btn-add" onclick="importSensors()">Import</button>
-      </div>
     </div>
   </div>
 
@@ -1123,82 +1107,6 @@
     } catch {
       // silent
     }
-  }
-
-  // --- Export / Import Sensors ---
-  function exportSensors() {
-    const config = collectConfig();
-    const sensorsJson = JSON.stringify(config.sensors, null, 2);
-    navigator.clipboard.writeText(sensorsJson).then(() => {
-      homebridge.toast.success("Sensors exported to clipboard");
-    }).catch(() => {
-      homebridge.toast.error("Failed to copy to clipboard");
-    });
-  }
-
-  function showImportModal() {
-    document.getElementById("import-textarea").value = "";
-    document.getElementById("import-modal").style.display = "flex";
-  }
-
-  function hideImportModal() {
-    document.getElementById("import-modal").style.display = "none";
-  }
-
-  function importSensors() {
-    const raw = document.getElementById("import-textarea").value.trim();
-    if (!raw) {
-      homebridge.toast.error("Please paste a JSON array of sensors.");
-      return;
-    }
-
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e) {
-      homebridge.toast.error("Invalid JSON: " + e.message);
-      return;
-    }
-
-    if (!Array.isArray(parsed)) {
-      homebridge.toast.error("Expected a JSON array of sensor objects.");
-      return;
-    }
-
-    for (let i = 0; i < parsed.length; i++) {
-      const s = parsed[i];
-      if (!s || typeof s !== "object") {
-        homebridge.toast.error("Item " + i + " is not a valid object.");
-        return;
-      }
-      if (typeof s.name !== "string" || !s.name.trim()) {
-        homebridge.toast.error('Item ' + i + ' is missing a valid "name".');
-        return;
-      }
-      if (!Array.isArray(s.cities)) {
-        homebridge.toast.error('Item ' + i + ' is missing a valid "cities" array.');
-        return;
-      }
-    }
-
-    // Remove all existing sensors (destroy TomSelect instances first)
-    Object.keys(tomInstances).forEach((id) => {
-      if (tomInstances[id]) {
-        tomInstances[id].destroy();
-        delete tomInstances[id];
-      }
-    });
-    document.getElementById("sensors-container").innerHTML = "";
-    sensorCounter = 0;
-
-    // Render imported sensors
-    parsed.forEach((s, i) => renderSensor(s, i));
-
-    hideImportModal();
-    syncConfig();
-    updateMapMarkers();
-    updateEmptyState();
-    homebridge.toast.success("Imported " + parsed.length + " sensor(s).");
   }
 
   // --- Duplicate Sensor ---

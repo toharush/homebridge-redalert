@@ -38,7 +38,6 @@
 - **Alert history** — Collapsible panel with filters (city, dedup status, active/ended) and configurable item limit. Auto-refreshes every 2 seconds.
 - **Collapsible UI** — Sensors and source cards collapse/expand for a cleaner config experience.
 - **Duplicate sensor** — One-click clone of any sensor to quickly set up multiple locations with similar settings.
-- **Export/Import sensors** — Export sensor config to clipboard as JSON, import from clipboard to quickly share or restore setups.
 - **Inline validation** — Real-time validation highlights missing sensor names or empty city lists before you save.
 - **Onboarding empty state** — Friendly first-run experience guides new users through adding their first sensor.
 - **Category mapping UI** — Custom sources now clearly show how to map source-specific IDs to plugin alert types, with a dedicated "Category ID Field" input.
