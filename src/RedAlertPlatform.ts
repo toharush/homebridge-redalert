@@ -85,7 +85,11 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     for (const accessory of this.sensorAccessories) {
       accessory.destroy();
     }
-    try { fs.unlinkSync(this.statusFilePath); } catch { /* ignore */ }
+    try {
+      fs.unlinkSync(this.statusFilePath);
+    } catch {
+      // ignore
+    }
   }
 
   configureAccessory(accessory: PlatformAccessory) {
@@ -145,7 +149,9 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     try {
       const status = this.pipeline?.getSourceStatus() ?? [];
       fs.writeFileSync(this.statusFilePath, JSON.stringify(status));
-    } catch { /* ignore */ }
+    } catch {
+      // ignore
+    }
   }
 
   private buildPipeline(

@@ -51,6 +51,15 @@
   }
 }
 
+/* App container */
+#app {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 16px;
+  border-radius: 8px;
+  min-height: 100vh;
+}
+
 /* Layout */
 .sensor-card {
   border: 1px solid var(--border-primary);

@@ -887,7 +887,7 @@
     map = L.map("city-map", { scrollWheelZoom: true }).setView(ISRAEL_CENTER, ISRAEL_ZOOM);
 
     const lightUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-    const darkUrl = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+    const darkUrl = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
     const darkMq = window.matchMedia("(prefers-color-scheme: dark)");
 
     let tileLayer = L.tileLayer(darkMq.matches ? darkUrl : lightUrl, {
