@@ -1,17 +1,20 @@
 import { OrefRealtimeAlert, OrefCategory } from '../types';
 import { PipelineStage } from './PipelineStage';
 import { DebugLogger } from '../utils/debugLogger';
+import { AlertHistory } from './AlertHistory';
 
 export class DeduplicationStage implements PipelineStage {
   private readonly seen = new Map<string, number>();
   private readonly seenSource = new Map<string, string>();
   private readonly windowMs: number;
   private readonly log: DebugLogger | null;
+  private readonly history: AlertHistory | null;
   private lastCleanup = 0;
 
-  constructor(windowMs: number = 30000, log?: DebugLogger) {
+  constructor(windowMs: number = 30000, log?: DebugLogger, history?: AlertHistory) {
     this.windowMs = windowMs;
     this.log = log ?? null;
+    this.history = history ?? null;
   }
 
   process(alerts: OrefRealtimeAlert[], sourceName?: string): OrefRealtimeAlert[] {
@@ -60,6 +63,10 @@ export class DeduplicationStage implements PipelineStage {
         this.log?.easyDebug(
           `[Dedup] WINNER ${sourceName ?? 'unknown'} for cat=${cat}: ${uniqueCities.join(', ')}`,
         );
+        this.history?.add({
+          timestamp: now, source: sourceName ?? 'unknown',
+          cat, title: alert.title, cities: uniqueCities, dedupResult: 'passed',
+        });
         if (uniqueCities.length === data.length) {
           (result ??= []).push(alert);
         } else {
@@ -74,6 +81,10 @@ export class DeduplicationStage implements PipelineStage {
           `[Dedup] DROP duplicate from ${sourceName ?? 'unknown'} ` +
           `for cat=${cat}: ${droppedCities.join(', ')} (first seen from ${firstSource})`,
         );
+        this.history?.add({
+          timestamp: now, source: sourceName ?? 'unknown',
+          cat, title: alert.title, cities: droppedCities, dedupResult: 'dropped',
+        });
       }
     }
 

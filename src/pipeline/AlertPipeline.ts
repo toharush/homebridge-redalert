@@ -5,6 +5,12 @@ import { PipelineStage } from './PipelineStage';
 import { AlertListener } from './AlertBus';
 import { parseAlerts } from '../services/SensorFilter';
 
+export interface SourceStatus {
+  name: string;
+  type: 'http' | 'websocket';
+  healthy: boolean;
+}
+
 export class AlertPipeline {
   private readonly sources: AlertSource[] = [];
   private readonly stages: PipelineStage[] = [];
@@ -14,6 +20,10 @@ export class AlertPipeline {
   private lastHealthy = true;
 
   constructor(private readonly log: DebugLogger) {}
+
+  getSourceStatus(): SourceStatus[] {
+    return this.sources.map((s) => ({ name: s.name, type: s.type, healthy: s.isHealthy() }));
+  }
 
   set onHealthChange(cb: (healthy: boolean) => void) {
     this.healthCallback = cb;

@@ -9,7 +9,9 @@ import _ from 'lodash';
 import { CATEGORY_MAP, ALL_CATEGORY_KEYS, SensorConfig } from './types';
 import { validateConfig } from './utils/configValidator';
 import { createDebugLogger, DebugLogger } from './utils/debugLogger';
-import { AlertPipeline, DeduplicationStage } from './pipeline';
+import { AlertPipeline, DeduplicationStage, AlertHistory } from './pipeline';
+import * as fs from 'fs';
+import * as path from 'path';
 import { SensorFilter } from './services/SensorFilter';
 import { OrefClient } from './clients/orefClient';
 import { HttpSource, HttpSourceConfig } from './clients/httpSource';
@@ -28,6 +30,8 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
   private readonly cachedAccessories: Map<string, PlatformAccessory> = new Map();
   private readonly sensorAccessories: MotionSensorAccessory[] = [];
   private pipeline: AlertPipeline | null = null;
+  private statusTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly statusFilePath: string;
 
   constructor(
     logger: Logger,
@@ -37,6 +41,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
     this.log = createDebugLogger(logger, _.get(config, 'debug', false));
+    this.statusFilePath = path.join(api.user.storagePath(), 'redalert-status.json');
 
     migrateConfig(api.user.configPath(), this.log);
 
@@ -72,10 +77,15 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
   }
 
   shutdown() {
+    if (this.statusTimer) {
+      clearInterval(this.statusTimer);
+      this.statusTimer = null;
+    }
     this.pipeline?.stop();
     for (const accessory of this.sensorAccessories) {
       accessory.destroy();
     }
+    try { fs.unlinkSync(this.statusFilePath); } catch { /* ignore */ }
   }
 
   configureAccessory(accessory: PlatformAccessory) {
@@ -126,7 +136,16 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
 
     this.removeStaleAccessories(activeUUIDs);
     pipeline.start();
+    this.writeStatus();
+    this.statusTimer = setInterval(() => this.writeStatus(), 5000);
     this.log.info('Red Alert is running. You may close the config window.');
+  }
+
+  private writeStatus(): void {
+    try {
+      const status = this.pipeline?.getSourceStatus() ?? [];
+      fs.writeFileSync(this.statusFilePath, JSON.stringify(status));
+    } catch { /* ignore */ }
   }
 
   private buildPipeline(
@@ -137,8 +156,9 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     ws: { reconnectInterval: number; maxReconnectInterval: number; pingInterval: number; pongTimeout: number },
   ): AlertPipeline {
     const pipeline = new AlertPipeline(this.log);
+    const history = new AlertHistory(50);
 
-    pipeline.addStage(new DeduplicationStage(30000, this.log));
+    pipeline.addStage(new DeduplicationStage(30000, this.log, history));
 
     const orefClient = new OrefClient(requestTimeout, this.log);
     pipeline.addSource(new HttpSource(this.log, {

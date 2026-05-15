@@ -28,6 +28,24 @@
 
 ---
 
+## What's New in v2
+
+- **Multi-source alert pipeline** — Alerts stream from Pikud HaOref (HTTP) and Tzofar (WebSocket) simultaneously. Custom HTTP/WebSocket sources can be added via the UI.
+- **Deduplication engine** — Identical alerts from different sources are merged in real-time so sensors only fire once, with debug logs showing which source won each race.
+- **Coverage map** — Interactive Leaflet map in the config UI shows all monitored cities with per-sensor color-coded markers. Supports dark mode tiles.
+- **Live connection status** — Green/red status dots on each built-in source card show real-time connectivity.
+- **Collapsible UI** — Sensors and source cards collapse/expand for a cleaner config experience.
+- **Duplicate sensor** — One-click clone of any sensor to quickly set up multiple locations with similar settings.
+- **Export/Import sensors** — Export sensor config to clipboard as JSON, import from clipboard to quickly share or restore setups.
+- **Inline validation** — Real-time validation highlights missing sensor names or empty city lists before you save.
+- **Onboarding empty state** — Friendly first-run experience guides new users through adding their first sensor.
+- **Category mapping UI** — Custom sources now clearly show how to map source-specific IDs to plugin alert types, with a dedicated "Category ID Field" input.
+- **Prefix matching** — Match sub-areas automatically (e.g. "תל אביב" matches "תל אביב - יפו").
+- **Health check accessory** — Optional HomeKit switch that turns OFF when all sources are unreachable.
+- **Automatic config migration** — v1.x comma-separated city strings and `custom_cities` fields are auto-migrated on first launch.
+
+---
+
 ## How It Works
 
 1. The plugin creates one **motion sensor** per configured sensor in HomeKit.
