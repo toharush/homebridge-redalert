@@ -686,9 +686,38 @@
   border-radius: 8px;
 }
 
+.history-filters {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-primary);
+  flex-wrap: wrap;
+}
+
+.history-filters input,
+.history-filters select {
+  padding: 4px 8px;
+  border: 1px solid var(--border-input);
+  border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--text-input);
+  font-size: 0.8em;
+  flex: 1;
+  min-width: 80px;
+}
+
 .history-row {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-primary);
+}
+
+.history-row-clickable {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.history-row-clickable:hover {
+  background: var(--bg-dropdown-active);
 }
 
 .history-row:last-child {

@@ -350,8 +350,31 @@
 
   <!-- Alert History (collapsible, at the end) -->
   <div id="history-section" style="display:none; margin-top: 20px;">
-    <span class="advanced-toggle" onclick="toggleHistory()">&#9654; Alert History</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <span class="advanced-toggle" onclick="toggleHistory()">&#9654; Alert History</span>
+      <button class="btn-secondary" style="font-size:0.75em;padding:2px 10px;" onclick="refreshHistory()">Refresh</button>
+    </div>
     <div id="history-panel" class="history-panel">
+      <div class="history-filters">
+        <input type="text" id="history-filter-city" placeholder="Filter by city..." oninput="renderHistoryList()">
+        <select id="history-filter-dedup" onchange="renderHistoryList()">
+          <option value="">All (dedup)</option>
+          <option value="passed">Passed</option>
+          <option value="dropped">Dropped</option>
+        </select>
+        <select id="history-filter-status" onchange="renderHistoryList()">
+          <option value="">All (status)</option>
+          <option value="active">Active</option>
+          <option value="ended">Ended</option>
+        </select>
+        <select id="history-limit" onchange="renderHistoryList()">
+          <option value="20">20 items</option>
+          <option value="50">50 items</option>
+          <option value="100">100 items</option>
+          <option value="500">500 items</option>
+          <option value="1000">All</option>
+        </select>
+      </div>
       <div id="history-list"></div>
     </div>
   </div>
@@ -1043,6 +1066,15 @@
     }
   }
 
+  // --- Fly to city on map ---
+  function flyToCity(cityName) {
+    if (!map) return;
+    const city = cities.find((c) => c.name === cityName);
+    if (!city || !city.lat || !city.lng) return;
+    map.flyTo([city.lat, city.lng], 13, { duration: 1 });
+    window.scrollTo({ top: document.getElementById("city-map").offsetTop - 20, behavior: "smooth" });
+  }
+
   // --- Active Alerts on Map ---
   let activeMarkers = [];
 
@@ -1063,6 +1095,8 @@
       }
 
       if (activeCities.size === 0) return;
+
+      console.log("[RedAlert UI] Active alerts on map:", [...activeCities]);
 
       const cityGeo = new Map();
       cities.forEach((c) => {
@@ -1262,6 +1296,8 @@
   }
 
   // --- Alert History ---
+  let historyData = [];
+
   function toggleHistory() {
     const panel = document.getElementById("history-panel");
     const toggle = document.querySelector("#history-section .advanced-toggle");
@@ -1275,42 +1311,73 @@
     try {
       const entries = await homebridge.request("/history");
       const section = document.getElementById("history-section");
-      const list = document.getElementById("history-list");
 
       if (!entries || entries.length === 0) {
         section.style.display = "none";
+        historyData = [];
         return;
       }
 
       section.style.display = "block";
-      const limited = entries.slice(0, 20);
-      list.innerHTML = limited.map((entry) => {
-        const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-        const date = new Date(entry.timestamp).toLocaleDateString([], { day: "2-digit", month: "2-digit" });
-        const dedupBadge = entry.dedupResult === "passed"
-          ? `<span class="history-badge badge-passed">passed</span>`
-          : `<span class="history-badge badge-dropped">dropped</span>`;
-        const statusBadge = entry.status === "active"
-          ? `<span class="history-badge badge-active">active</span>`
-          : entry.status === "ended"
-            ? `<span class="history-badge badge-ended">ended</span>`
-            : "";
-        const badge = dedupBadge + statusBadge;
-        const cities = entry.cities.join(", ");
-        return `<div class="history-row">
-          <div class="history-row-top">
-            <span class="history-time">${date} ${time}</span>
-            <span class="history-source">${escapeHtml(entry.source)}</span>
-            ${badge}
-          </div>
-          <div class="history-row-bottom">
-            <span class="history-title">${escapeHtml(entry.title || "cat " + entry.cat)}</span>
-            <span class="history-cities">${escapeHtml(cities)}</span>
-          </div>
-        </div>`;
-      }).join("");
+      historyData = entries;
+      renderHistoryList();
+      updateActiveAlerts();
     } catch {
       // silent
+    }
+  }
+
+  function renderHistoryList() {
+    const list = document.getElementById("history-list");
+    if (!historyData.length) { list.innerHTML = ""; return; }
+
+    const cityFilter = (document.getElementById("history-filter-city").value || "").trim().toLowerCase();
+    const dedupFilter = document.getElementById("history-filter-dedup").value;
+    const statusFilter = document.getElementById("history-filter-status").value;
+    const limit = parseInt(document.getElementById("history-limit").value) || 20;
+
+    let filtered = historyData;
+    if (cityFilter) {
+      filtered = filtered.filter((e) => e.cities.some((c) => c.toLowerCase().includes(cityFilter)));
+    }
+    if (dedupFilter) {
+      filtered = filtered.filter((e) => e.dedupResult === dedupFilter);
+    }
+    if (statusFilter) {
+      filtered = filtered.filter((e) => e.status === statusFilter);
+    }
+
+    const limited = filtered.slice(0, limit);
+    list.innerHTML = limited.map((entry) => {
+      const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      const date = new Date(entry.timestamp).toLocaleDateString([], { day: "2-digit", month: "2-digit" });
+      const dedupBadge = entry.dedupResult === "passed"
+        ? `<span class="history-badge badge-passed">passed</span>`
+        : `<span class="history-badge badge-dropped">dropped</span>`;
+      const statusBadge = entry.status === "active"
+        ? `<span class="history-badge badge-active">active</span>`
+        : entry.status === "ended"
+          ? `<span class="history-badge badge-ended">ended</span>`
+          : "";
+      const badge = dedupBadge + statusBadge;
+      const citiesArr = entry.cities;
+      const citiesStr = citiesArr.join(", ");
+      const clickCity = citiesArr[0] ? `onclick="flyToCity('${escapeHtml(citiesArr[0]).replace(/'/g, "\\'")}')"` : "";
+      return `<div class="history-row${clickCity ? " history-row-clickable" : ""}" ${clickCity}>
+        <div class="history-row-top">
+          <span class="history-time">${date} ${time}</span>
+          <span class="history-source">${escapeHtml(entry.source)}</span>
+          ${badge}
+        </div>
+        <div class="history-row-bottom">
+          <span class="history-title">${escapeHtml(entry.title || "cat " + entry.cat)}</span>
+          <span class="history-cities">${escapeHtml(citiesStr)}</span>
+        </div>
+      </div>`;
+    }).join("");
+
+    if (limited.length === 0) {
+      list.innerHTML = `<div class="history-row" style="text-align:center;color:var(--text-muted);padding:16px;">No matching entries</div>`;
     }
   }
 
@@ -1324,6 +1391,7 @@
     statusInterval = setInterval(() => {
       pollStatus();
       updateActiveAlerts();
-    }, 10000);
+      refreshHistory();
+    }, 2000);
   });
 </script>

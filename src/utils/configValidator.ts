@@ -16,6 +16,7 @@ export function validateConfig(config: PlatformConfig, log: Logger): ValidatedCo
   }
 
   validateCustomSources(config, log);
+  validateWebhooks(config, log);
 
   return config as ValidatedConfig;
 }
@@ -53,6 +54,27 @@ function validateCustomSources(config: PlatformConfig, log: Logger): void {
         `[${label}] No category_mapping defined — this source will not produce any alerts. `
         + 'Add at least one mapping (e.g. "1" → "rockets").',
       );
+    }
+  }
+}
+
+function validateWebhooks(config: PlatformConfig, log: Logger): void {
+  const hooks: any[] = _.get(config, 'webhooks', []);
+  for (let i = 0; i < hooks.length; i++) {
+    const hook = hooks[i];
+    const label = `webhooks[${i}]`;
+
+    if (!hook.url || typeof hook.url !== 'string' || !hook.url.trim()) {
+      log.warn(`[${label}] Missing or empty "url" — webhook will be skipped`);
+      continue;
+    }
+
+    if (!/^https?:\/\/.+/.test(hook.url)) {
+      log.warn(`[${label}] URL "${hook.url}" does not look like a valid HTTP(S) URL`);
+    }
+
+    if (hook.method && hook.method !== 'POST' && hook.method !== 'PUT') {
+      log.warn(`[${label}] Invalid method "${hook.method}" — must be "POST" or "PUT"`);
     }
   }
 }
