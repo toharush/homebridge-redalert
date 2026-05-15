@@ -163,6 +163,7 @@ export class SensorFilter implements AlertListener {
     for (const [city, timestamp] of this.activeCities) {
       if (now - timestamp > this.maxActiveAgeMs) {
         this.activeCities.delete(city);
+        this.history?.markEnded(this.name, city);
         this.log.warn(`[${this.name}] Alert for ${city} expired after ${this.maxActiveAgeMs / 1000}s (safety fallback)`);
       }
     }
