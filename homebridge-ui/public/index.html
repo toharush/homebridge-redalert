@@ -341,11 +341,6 @@
     <div id="history-panel" class="history-panel">
       <div class="history-filters">
         <input type="text" id="history-filter-city" placeholder="Filter by city..." oninput="renderHistoryList()">
-        <select id="history-filter-dedup" onchange="renderHistoryList()">
-          <option value="">All (dedup)</option>
-          <option value="passed">Passed</option>
-          <option value="dropped">Dropped</option>
-        </select>
         <select id="history-filter-status" onchange="renderHistoryList()">
           <option value="">All (status)</option>
           <option value="active">Active</option>
@@ -1073,8 +1068,8 @@
 
       const activeCities = new Set();
       for (const entry of entries) {
-        if (entry.status === "active") {
-          entry.cities.forEach((c) => activeCities.add(c));
+        if (entry.status === "active" && entry.city) {
+          activeCities.add(entry.city);
         }
       }
 
@@ -1240,16 +1235,12 @@
     if (!historyData.length) { list.innerHTML = ""; return; }
 
     const cityFilter = (document.getElementById("history-filter-city").value || "").trim().toLowerCase();
-    const dedupFilter = document.getElementById("history-filter-dedup").value;
     const statusFilter = document.getElementById("history-filter-status").value;
     const limit = parseInt(document.getElementById("history-limit").value) || 20;
 
     let filtered = historyData;
     if (cityFilter) {
-      filtered = filtered.filter((e) => e.cities.some((c) => c.toLowerCase().includes(cityFilter)));
-    }
-    if (dedupFilter) {
-      filtered = filtered.filter((e) => e.dedupResult === dedupFilter);
+      filtered = filtered.filter((e) => (e.city || "").toLowerCase().includes(cityFilter));
     }
     if (statusFilter) {
       filtered = filtered.filter((e) => e.status === statusFilter);
@@ -1259,27 +1250,19 @@
     list.innerHTML = limited.map((entry) => {
       const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
       const date = new Date(entry.timestamp).toLocaleDateString([], { day: "2-digit", month: "2-digit" });
-      const dedupBadge = entry.dedupResult === "passed"
-        ? `<span class="history-badge badge-passed">passed</span>`
-        : `<span class="history-badge badge-dropped">dropped</span>`;
       const statusBadge = entry.status === "active"
         ? `<span class="history-badge badge-active">active</span>`
-        : entry.status === "ended"
-          ? `<span class="history-badge badge-ended">ended</span>`
-          : "";
-      const badge = dedupBadge + statusBadge;
-      const citiesArr = entry.cities;
-      const citiesStr = citiesArr.join(", ");
-      const clickCity = citiesArr[0] ? `onclick="flyToCity('${escapeHtml(citiesArr[0]).replace(/'/g, "\\'")}')"` : "";
+        : `<span class="history-badge badge-ended">ended</span>`;
+      const clickCity = entry.city ? `onclick="flyToCity('${escapeHtml(entry.city).replace(/'/g, "\\'")}')"` : "";
       return `<div class="history-row${clickCity ? " history-row-clickable" : ""}" ${clickCity}>
         <div class="history-row-top">
           <span class="history-time">${date} ${time}</span>
           <span class="history-source">${escapeHtml(entry.source)}</span>
-          ${badge}
+          ${statusBadge}
         </div>
         <div class="history-row-bottom">
           <span class="history-title">${escapeHtml(entry.title || "cat " + entry.cat)}</span>
-          <span class="history-cities">${escapeHtml(citiesStr)}</span>
+          <span class="history-cities">${escapeHtml(entry.city || "")}</span>
         </div>
       </div>`;
     }).join("");

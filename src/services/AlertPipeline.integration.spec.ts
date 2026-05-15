@@ -16,7 +16,7 @@ import {
   mockFetchSequence,
   TestPipeline,
 } from './SensorFilter.mock';
-import { DEFAULT_ALERT_TIMEOUT, DEFAULT_HEALTH_CHECK_THRESHOLD } from '../settings';
+import { DEFAULT_HEALTH_CHECK_THRESHOLD } from '../settings';
 
 describe('alert lifecycle', () => {
   afterEach(() => {
@@ -332,41 +332,26 @@ describe('cross-category sensor independence', () => {
     assert.strictEqual(sensor.lastState!.isActive, false);
   });
 
-  it('unrelated category does NOT refresh expired sensor', async () => {
+  it('unrelated category does NOT activate sensor', async () => {
     const p = new TestPipeline([
-      [makeAlert(OrefCategory.Rockets, ['תל אביב'])],
       [makeAlert(OrefCategory.Earthquake, ['תל אביב'])],
     ]);
-    const { sensor, filter } = p.addSensor(['תל אביב'], new Set(CATEGORY_MAP['rockets']), { timeout: 100 });
+    const { sensor } = p.addSensor(['תל אביב'], new Set(CATEGORY_MAP['rockets']));
 
     await p.poll();
-    assert.strictEqual(sensor.lastState!.isActive, true);
-
-    const activeCities = (filter as any).activeCities as Map<string, number>;
-    activeCities.set('תל אביב', Date.now() - 200);
-
-    await p.poll();
-    assert.strictEqual(sensor.lastState!.isActive, false, 'earthquake should not refresh rocket sensor');
+    assert.strictEqual(sensor.lastState!.isActive, false, 'earthquake should not activate rocket sensor');
   });
 
-  it('notice keeps notice sensor alive but NOT rocket sensor', async () => {
+  it('notice activates notice sensor but NOT rocket sensor', async () => {
     const p = new TestPipeline([
-      [makeAlert(OrefCategory.Rockets, ['תל אביב']), makeHeadsUpNotice(['תל אביב'])],
       [makeHeadsUpNotice(['תל אביב'])],
     ]);
-    const { sensor: rocketSensor, filter: rocketFilter } = p.addSensor(['תל אביב'], new Set(CATEGORY_MAP['rockets']), { timeout: 100 });
-    const { sensor: noticeSensor } = p.addSensor(['תל אביב'], new Set(CATEGORY_MAP['warning']), { timeout: 100 });
+    const { sensor: rocketSensor } = p.addSensor(['תל אביב'], new Set(CATEGORY_MAP['rockets']));
+    const { sensor: noticeSensor } = p.addSensor(['תל אביב'], new Set(CATEGORY_MAP['warning']));
 
     await p.poll();
-    assert.strictEqual(rocketSensor.lastState!.isActive, true);
-    assert.strictEqual(noticeSensor.lastState!.isActive, true);
-
-    const rocketCities = (rocketFilter as any).activeCities as Map<string, number>;
-    rocketCities.set('תל אביב', Date.now() - 200);
-
-    await p.poll();
-    assert.strictEqual(rocketSensor.lastState!.isActive, false, 'rocket expired');
-    assert.strictEqual(noticeSensor.lastState!.isActive, true, 'notice refreshed');
+    assert.strictEqual(rocketSensor.lastState!.isActive, false, 'rocket not activated by notice');
+    assert.strictEqual(noticeSensor.lastState!.isActive, true, 'notice activated');
   });
 
   it('cross-category alert does NOT activate a new city — only refreshes existing', async () => {
@@ -563,159 +548,6 @@ describe('prefix matching', () => {
   });
 });
 
-describe('timeout and expiry', () => {
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
-  it('alert expires after timeout without Event Ended', async () => {
-    const p = new TestPipeline([
-      [makeAlert(OrefCategory.Rockets, ['תל אביב'])],
-      [],
-    ]);
-    const { sensor, filter } = p.addSensor(['תל אביב'], allCategoryIds(), { timeout: 100 });
-
-    await p.poll();
-    assert.strictEqual(sensor.lastState!.isActive, true);
-
-    const activeCities = (filter as any).activeCities as Map<string, number>;
-    activeCities.set('תל אביב', Date.now() - 200);
-
-    await p.poll();
-    assert.strictEqual(sensor.lastState!.isActive, false);
-  });
-
-  it('alert does NOT expire within timeout', async () => {
-    const p = new TestPipeline([
-      [makeAlert(OrefCategory.Rockets, ['תל אביב'])],
-      [],
-    ]);
-    const { sensor } = p.addSensor(['תל אביב'], allCategoryIds(), { timeout: 5000 });
-    await p.pollN(2);
-
-    assert.strictEqual(sensor.lastState!.isActive, true);
-  });
-
-  it('repeated alerts reset the timeout', async () => {
-    const p = new TestPipeline([
-      [makeAlert(OrefCategory.Rockets, ['תל אביב'])],
-      [makeAlert(OrefCategory.Rockets, ['תל אביב'])],
-    ]);
-    const { filter } = p.addSensor(['תל אביב'], allCategoryIds(), { timeout: 100 });
-
-    await p.poll();
-    const activeCities = (filter as any).activeCities as Map<string, number>;
-    activeCities.set('תל אביב', Date.now() - 90);
-
-    await p.poll();
-    const timestamp = activeCities.get('תל אביב')!;
-    assert.ok(Date.now() - timestamp < 50, 'timestamp should be fresh');
-  });
-
-  it('one city expires while another stays active', async () => {
-    const p = new TestPipeline([
-      [makeAlert(OrefCategory.Rockets, ['תל אביב'])],
-      [makeAlert(OrefCategory.Rockets, ['חיפה'])],
-    ]);
-    const { sensor, filter } = p.addSensor(['תל אביב', 'חיפה'], allCategoryIds(), { timeout: 100 });
-
-    await p.poll();
-    const activeCities = (filter as any).activeCities as Map<string, number>;
-    activeCities.set('תל אביב', Date.now() - 200);
-
-    await p.poll();
-    assert.strictEqual(sensor.lastState!.isActive, true);
-    assert.ok(!sensor.lastState!.activeCities.has('תל אביב'));
-    assert.ok(sensor.lastState!.activeCities.has('חיפה'));
-  });
-
-  it('rescue from expiry when new alert arrives before timeout', async () => {
-    const p = new TestPipeline([
-      [makeAlert(OrefCategory.Rockets, ['תל אביב'])],
-      [makeAlert(OrefCategory.Rockets, ['תל אביב'])],
-    ]);
-    const { sensor, filter } = p.addSensor(['תל אביב'], allCategoryIds(), { timeout: 100 });
-
-    await p.poll();
-    const activeCities = (filter as any).activeCities as Map<string, number>;
-    activeCities.set('תל אביב', Date.now() - 99);
-
-    await p.poll();
-    assert.strictEqual(sensor.lastState!.isActive, true);
-    assert.ok(Date.now() - activeCities.get('תל אביב')! < 50);
-  });
-
-  it('exact timeout boundary: not expired at boundary, expired past it', async () => {
-    const p = new TestPipeline([
-      [makeAlert(OrefCategory.Rockets, ['תל אביב'])],
-      [],
-      [],
-    ]);
-    const { sensor, filter } = p.addSensor(['תל אביב'], allCategoryIds(), { timeout: 100 });
-
-    await p.poll();
-    const activeCities = (filter as any).activeCities as Map<string, number>;
-
-    activeCities.set('תל אביב', Date.now() - 100);
-    await p.poll();
-    assert.strictEqual(sensor.lastState!.isActive, true, 'at exactly timeout — not expired');
-
-    activeCities.set('תל אביב', Date.now() - 101);
-    await p.poll();
-    assert.strictEqual(sensor.lastState!.isActive, false, 'past timeout — expired');
-  });
-
-  it('timeout expiry after some cities cleared by event ended', async () => {
-    const p = new TestPipeline([
-      [makeAlert(OrefCategory.Rockets, ['תל אביב', 'חיפה'])],
-      [makeEventEnded(['חיפה'])],
-      [],
-    ]);
-    const { sensor, filter } = p.addSensor(['תל אביב', 'חיפה'], allCategoryIds(), { timeout: 100 });
-
-    await p.poll();
-    assert.strictEqual(sensor.lastState!.activeCities.size, 2);
-
-    await p.poll();
-    assert.strictEqual(sensor.lastState!.activeCities.size, 1);
-
-    const activeCities = (filter as any).activeCities as Map<string, number>;
-    activeCities.set('תל אביב', Date.now() - 200);
-    await p.poll();
-    assert.strictEqual(sensor.lastState!.isActive, false);
-  });
-
-  it('multiple cities both expire when only unrelated category arrives', async () => {
-    const p = new TestPipeline([
-      [makeAlert(OrefCategory.Rockets, ['תל אביב', 'חיפה'])],
-      [makeHeadsUpNotice(['תל אביב'])],
-    ]);
-    const { sensor, filter } = p.addSensor(['תל אביב', 'חיפה'], new Set(CATEGORY_MAP['rockets']), { timeout: 100 });
-
-    await p.poll();
-    const activeCities = (filter as any).activeCities as Map<string, number>;
-    activeCities.set('תל אביב', Date.now() - 200);
-    activeCities.set('חיפה', Date.now() - 200);
-
-    await p.poll();
-    assert.strictEqual(sensor.lastState!.isActive, false, 'notice does not refresh rocket sensor');
-  });
-
-  it('all-categories sensor IS refreshed by notice (notice is an allowed category)', async () => {
-    const p = new TestPipeline([
-      [makeAlert(OrefCategory.Rockets, ['תל אביב'])],
-      [makeHeadsUpNotice(['תל אביב'])],
-    ]);
-    const { sensor, filter } = p.addSensor(['תל אביב'], allCategoryIds(), { timeout: 100 });
-
-    await p.poll();
-    const activeCities = (filter as any).activeCities as Map<string, number>;
-    activeCities.set('תל אביב', Date.now() - 200);
-
-    await p.poll();
-    assert.strictEqual(sensor.lastState!.isActive, true, 'notice refreshed the all-categories sensor');
-  });
-});
 
 describe('edge cases', () => {
   afterEach(() => {
@@ -769,7 +601,7 @@ describe('edge cases', () => {
     const client = new OrefClient(3000);
     const log = createMockLogger();
     const sensor = createMockAccessory();
-    const filter = new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false);
+    const filter = new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), false);
 
     const alerts = await client.fetchAlerts();
     filter.handleAlerts(parseAlerts(alerts));
@@ -940,7 +772,7 @@ describe('pipeline async polling', () => {
       failureThreshold: DEFAULT_HEALTH_CHECK_THRESHOLD, fetchFn: () => client.fetchAlerts(),
     }));
     const sensor = createMockAccessory();
-    pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+    pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), false));
 
     pipeline.start();
     await new Promise((r) => setTimeout(r, 50));
@@ -973,7 +805,7 @@ describe('pipeline async polling', () => {
       failureThreshold: DEFAULT_HEALTH_CHECK_THRESHOLD, fetchFn: () => client.fetchAlerts(),
     }));
     const sensor = createMockAccessory();
-    pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+    pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), false));
 
     pipeline.start();
     await new Promise((r) => setTimeout(r, 200));
@@ -998,7 +830,7 @@ describe('pipeline async polling', () => {
       failureThreshold: DEFAULT_HEALTH_CHECK_THRESHOLD, fetchFn: () => client.fetchAlerts(),
     }));
     const sensor = createMockAccessory();
-    pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+    pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), false));
 
     pipeline.start();
     await new Promise((r) => setTimeout(r, 50));
@@ -1018,7 +850,7 @@ describe('pipeline async polling', () => {
       failureThreshold: DEFAULT_HEALTH_CHECK_THRESHOLD, fetchFn: () => client.fetchAlerts(),
     }));
     const sensor = createMockAccessory();
-    pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+    pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), false));
 
     pipeline.start();
     await new Promise((r) => setTimeout(r, 50));
@@ -1117,7 +949,7 @@ describe('health tracking', () => {
       failureThreshold: 3, fetchFn: () => client.fetchAlerts(),
     }));
     const healthChanges: boolean[] = [];
-    pipeline.onHealthChange = (h) => healthChanges.push(h);
+    pipeline.onHealthChange = (status) => healthChanges.push(status.some((s) => s.healthy));
 
     pipeline.start();
     await new Promise((r) => setTimeout(r, 150));
@@ -1149,7 +981,7 @@ describe('health tracking', () => {
       failureThreshold: 3, fetchFn: () => client.fetchAlerts(),
     }));
     const healthChanges: boolean[] = [];
-    pipeline.onHealthChange = (h) => healthChanges.push(h);
+    pipeline.onHealthChange = (status) => healthChanges.push(status.some((s) => s.healthy));
 
     pipeline.start();
     await new Promise((r) => setTimeout(r, 200));
@@ -1180,7 +1012,7 @@ describe('health tracking', () => {
       failureThreshold: 5, fetchFn: () => client.fetchAlerts(),
     }));
     const healthChanges: boolean[] = [];
-    pipeline.onHealthChange = (h) => healthChanges.push(h);
+    pipeline.onHealthChange = (status) => healthChanges.push(status.some((s) => s.healthy));
 
     pipeline.start();
     await new Promise((r) => setTimeout(r, 200));
@@ -1212,7 +1044,7 @@ describe('health tracking', () => {
       failureThreshold: 3, fetchFn: () => client.fetchAlerts(),
     }));
     const healthChanges: boolean[] = [];
-    pipeline.onHealthChange = (h) => healthChanges.push(h);
+    pipeline.onHealthChange = (status) => healthChanges.push(status.some((s) => s.healthy));
 
     pipeline.start();
     await new Promise((r) => setTimeout(r, 200));
@@ -1252,7 +1084,7 @@ describe('multi-source deduplication', () => {
     pipeline.addStage(new DeduplicationStage(30000, log));
 
     const sensor = createMockAccessory();
-    pipeline.subscribe(new SensorFilter('Home', log, sensor, ['שומרה'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+    pipeline.subscribe(new SensorFilter('Home', log, sensor, ['שומרה'], allCategoryIds(), false));
 
     const tzofarAlert: OrefRealtimeAlert = {
       id: 'tzofar-1778835536091', cat: '6', title: 'Threat 5', data: ['שומרה'], desc: '',
@@ -1273,13 +1105,6 @@ describe('multi-source deduplication', () => {
     assert.strictEqual(sensor.lastState!.activeCities.size, 1);
     assert.ok(sensor.lastState!.activeCities.has('שומרה'));
 
-    // Verify dedup logs show winner and drop
-    const debugCalls = log.easyDebug.mock.calls.map((c: any) => {
-      const arg = c.arguments[0];
-      return typeof arg === 'function' ? arg() : arg;
-    });
-    assert.ok(debugCalls.some((m: string) => m.includes('WINNER') && m.includes('Tzofar')));
-    assert.ok(debugCalls.some((m: string) => m.includes('DROP') && m.includes('Pikud HaOref')));
   });
 
   it('both sources send event-ended — sensor deactivates on first, second is harmless', async () => {
@@ -1289,7 +1114,7 @@ describe('multi-source deduplication', () => {
     pipeline.addStage(new DeduplicationStage(30000, log));
 
     const sensor = createMockAccessory();
-    pipeline.subscribe(new SensorFilter('Home', log, sensor, ['שומרה'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+    pipeline.subscribe(new SensorFilter('Home', log, sensor, ['שומרה'], allCategoryIds(), false));
 
     // First activate
     (pipeline as any).ingest('Tzofar', [
@@ -1317,7 +1142,7 @@ describe('multi-source deduplication', () => {
     pipeline.addStage(new DeduplicationStage(30000, log));
 
     const sensor = createMockAccessory();
-    pipeline.subscribe(new SensorFilter('Home', log, sensor, ['שומרה', 'זרעית'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+    pipeline.subscribe(new SensorFilter('Home', log, sensor, ['שומרה', 'זרעית'], allCategoryIds(), false));
 
     // Tzofar early warning falls back to nationwide
     (pipeline as any).ingest('Tzofar', [
@@ -1342,7 +1167,7 @@ describe('multi-source deduplication', () => {
     pipeline.addStage(new DeduplicationStage(30000, log));
 
     const sensor = createMockAccessory();
-    pipeline.subscribe(new SensorFilter('North', log, sensor, ['שומרה', 'זרעית'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+    pipeline.subscribe(new SensorFilter('North', log, sensor, ['שומרה', 'זרעית'], allCategoryIds(), false));
 
     (pipeline as any).ingest('Tzofar', [
       { id: 'tz-1', cat: '6', title: 'UAV', data: ['שומרה'], desc: '' },

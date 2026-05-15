@@ -2,9 +2,9 @@ import { mock } from 'node:test';
 import { CATEGORY_MAP, OrefRealtimeAlert, AlertState } from '../types';
 import { OrefClient } from '../clients/orefClient';
 import { SensorFilter, AlertAccessory, parseAlerts } from './SensorFilter';
-import { AlertPipeline } from '../pipeline';
+import { AlertPipeline, DeduplicationStage } from '../pipeline';
 import { HttpSource } from '../clients/httpSource';
-import { DEFAULT_ALERT_TIMEOUT, DEFAULT_HEALTH_CHECK_THRESHOLD } from '../settings';
+import { DEFAULT_HEALTH_CHECK_THRESHOLD } from '../settings';
 
 // Re-export everything from orefClient.mock so consumers go through this layer
 export {
@@ -105,7 +105,7 @@ export class TestPipeline {
   addSensor(
     cities: string[],
     categories: Set<number>,
-    opts?: { timeout?: number; prefix?: boolean; name?: string },
+    opts?: { prefix?: boolean; name?: string },
   ): SensorHandle {
     const sensor = createMockAccessory();
     const filter = new SensorFilter(
@@ -114,7 +114,6 @@ export class TestPipeline {
       sensor,
       cities,
       categories,
-      opts?.timeout ?? DEFAULT_ALERT_TIMEOUT,
       opts?.prefix ?? false,
     );
     this._filters.push(filter);
@@ -143,6 +142,7 @@ export class TestPipeline {
   /** Real pipeline polling through HttpSource + OrefClient */
   async runService(opts?: { pollInterval?: number; waitMs?: number }): Promise<void> {
     const pipeline = new AlertPipeline(this.log);
+    pipeline.addStage(new DeduplicationStage());
     pipeline.addSource(new HttpSource(this.log, {
       name: 'test-oref',
       url: '',

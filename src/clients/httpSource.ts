@@ -91,9 +91,7 @@ export class HttpSource implements AlertSource {
         if (elapsed > 2000) {
           this.log.warn(`[${this.name}] Slow response: ${elapsed}ms`);
         }
-        if (alerts.length > 0) {
-          this.alertCallback?.(alerts);
-        }
+        this.alertCallback?.(alerts);
         this.onSuccess();
       })
       .catch((err: Error) => {

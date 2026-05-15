@@ -1,20 +1,7 @@
-import { describe, it, mock } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { DeduplicationStage } from './DeduplicationStage';
 import { OrefCategory } from '../types';
-
-function createMockLogger() {
-  return {
-    info: mock.fn(),
-    warn: mock.fn(),
-    error: mock.fn(),
-    debug: mock.fn(),
-    log: mock.fn(),
-    success: mock.fn(),
-    easyDebug: mock.fn(),
-    prefix: '',
-  } as any;
-}
 
 describe('DeduplicationStage', () => {
   it('passes through unique alerts', () => {
@@ -79,8 +66,7 @@ describe('DeduplicationStage', () => {
   });
 
   it('real scenario: Tzofar arrives first, Pikud HaOref 5s later — only one passes', () => {
-    const log = createMockLogger();
-    const stage = new DeduplicationStage(30000, log);
+    const stage = new DeduplicationStage(30000);
 
     const tzofarAlert = {
       id: 'tzofar-1778835536091',
@@ -104,19 +90,10 @@ describe('DeduplicationStage', () => {
 
     const result2 = stage.process([orefAlert], 'Pikud HaOref');
     assert.strictEqual(result2.length, 0, 'Pikud HaOref duplicate should be dropped');
-
-    assert(log.easyDebug.mock.calls.length > 0, 'Debug logs should have been emitted');
-    const logMessages = log.easyDebug.mock.calls.map((c: any) => {
-      const arg = c.arguments[0];
-      return typeof arg === 'function' ? arg() : arg;
-    });
-    assert(logMessages.some((m: string) => m.includes('WINNER') && m.includes('Tzofar')));
-    assert(logMessages.some((m: string) => m.includes('DROP') && m.includes('Pikud HaOref')));
   });
 
   it('real scenario: event-ended from both sources — both pass through', () => {
-    const log = createMockLogger();
-    const stage = new DeduplicationStage(30000, log);
+    const stage = new DeduplicationStage(30000);
 
     const tzofarEnded = {
       id: 'tzofar-exit-1778836112281',
@@ -142,8 +119,7 @@ describe('DeduplicationStage', () => {
   });
 
   it('real scenario: Pikud HaOref wins if it arrives first', () => {
-    const log = createMockLogger();
-    const stage = new DeduplicationStage(30000, log);
+    const stage = new DeduplicationStage(30000);
 
     const orefAlert = {
       id: '134233091340000000',
@@ -166,12 +142,5 @@ describe('DeduplicationStage', () => {
 
     const result2 = stage.process([tzofarAlert], 'Tzofar');
     assert.strictEqual(result2.length, 0, 'Tzofar duplicate should be dropped');
-
-    const logMessages = log.easyDebug.mock.calls.map((c: any) => {
-      const arg = c.arguments[0];
-      return typeof arg === 'function' ? arg() : arg;
-    });
-    assert(logMessages.some((m: string) => m.includes('WINNER') && m.includes('Pikud HaOref')));
-    assert(logMessages.some((m: string) => m.includes('DROP') && m.includes('Tzofar')));
   });
 });

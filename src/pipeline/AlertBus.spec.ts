@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { AlertPipeline } from './AlertPipeline';
+import { DeduplicationStage } from './DeduplicationStage';
 import { ParsedAlerts } from '../services/SensorFilter';
 import { AlertListener } from './AlertBus';
 import { OrefRealtimeAlert } from '../types';
@@ -34,6 +35,7 @@ describe('AlertPipeline: subscribe/publish', () => {
     const source = new MockSource();
     const received: ParsedAlerts[] = [];
 
+    pipeline.addStage(new DeduplicationStage());
     const listener: AlertListener = { handleAlerts(parsed) {
       received.push(parsed);
     } };
@@ -51,6 +53,7 @@ describe('AlertPipeline: subscribe/publish', () => {
   it('does nothing with no subscribers', () => {
     const pipeline = new AlertPipeline(createLogger());
     const source = new MockSource();
+    pipeline.addStage(new DeduplicationStage());
     pipeline.addSource(source);
     pipeline.start();
     source.emit([{ id: '1', cat: '1', title: 'Rockets', data: ['city1'], desc: '' }]);

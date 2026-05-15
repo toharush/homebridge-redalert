@@ -142,100 +142,6 @@ describe('SensorFilter: activeCities tracking', () => {
   });
 });
 
-describe('SensorFilter: timestamp expiry', () => {
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
-  it('removes expired cities from activeCities on next poll', async () => {
-    const p = new TestPipeline([
-      [ROCKET],
-      [],
-    ]);
-    const { getActiveCities } = p.addSensor(['פתח תקווה'], allCategoryIds(), { timeout: 100 });
-
-    await p.poll();
-    assert.strictEqual(getActiveCities().size, 1);
-
-    getActiveCities().set('פתח תקווה', Date.now() - 200);
-    await p.poll();
-    assert.strictEqual(getActiveCities().size, 0);
-  });
-
-  it('does NOT expire at exact timeout boundary (only > timeout)', async () => {
-    const p = new TestPipeline([
-      [ROCKET],
-      [],
-      [],
-    ]);
-    const { getActiveCities } = p.addSensor(['פתח תקווה'], allCategoryIds(), { timeout: 100 });
-
-    await p.poll();
-
-    getActiveCities().set('פתח תקווה', Date.now() - 100);
-    await p.poll();
-    assert.strictEqual(getActiveCities().size, 1, 'at exact boundary — not expired');
-
-    getActiveCities().set('פתח תקווה', Date.now() - 101);
-    await p.poll();
-    assert.strictEqual(getActiveCities().size, 0, 'past boundary — expired');
-  });
-
-  it('expires one city while another stays active in activeCities', async () => {
-    const p = new TestPipeline([
-      [ROCKET],
-      [],
-    ]);
-    const { sensor, getActiveCities } = p.addSensor(
-      ['פתח תקווה', 'בני ברק'], allCategoryIds(), { timeout: 100 },
-    );
-
-    await p.poll();
-    assert.strictEqual(getActiveCities().size, 2);
-
-    // Age only פתח תקווה
-    getActiveCities().set('פתח תקווה', Date.now() - 200);
-    await p.poll();
-
-    assert.strictEqual(getActiveCities().size, 1);
-    assert.ok(!getActiveCities().has('פתח תקווה'));
-    assert.ok(getActiveCities().has('בני ברק'));
-    assert.strictEqual(sensor.lastState!.isActive, true, 'still active — בני ברק remains');
-  });
-
-  it('new alert rescues city from expiry by refreshing timestamp', async () => {
-    const p = new TestPipeline([
-      [ROCKET],
-      [ROCKET],
-    ]);
-    const { getActiveCities } = p.addSensor(['פתח תקווה'], allCategoryIds(), { timeout: 100 });
-
-    await p.poll();
-    getActiveCities().set('פתח תקווה', Date.now() - 99); // near expiry
-
-    await p.poll(); // fresh alert resets timestamp
-    assert.strictEqual(getActiveCities().size, 1);
-    assert.ok(Date.now() - getActiveCities().get('פתח תקווה')! < 500, 'timestamp refreshed');
-  });
-
-  it('logs warning when alert expires (safety fallback)', async () => {
-    const p = new TestPipeline([
-      [ROCKET],
-      [],
-    ]);
-    const { getActiveCities } = p.addSensor(['פתח תקווה'], allCategoryIds(), { timeout: 100 });
-
-    await p.poll();
-    getActiveCities().set('פתח תקווה', Date.now() - 200);
-    await p.poll();
-
-    assert.ok(p.log.warn.mock.calls.length >= 1, 'should log expiry warning');
-    assert.ok(
-      p.log.warn.mock.calls.some((c: any) => c.arguments[0].includes('expired')),
-      'warning should mention expiry',
-    );
-  });
-});
 
 describe('SensorFilter: category filtering on activeCities', () => {
   afterEach(() => {
@@ -256,35 +162,26 @@ describe('SensorFilter: category filtering on activeCities', () => {
     assert.strictEqual(getActiveCities().size, 1, 'rockets activates');
   });
 
-  it('unrelated category does NOT refresh timestamp in activeCities', async () => {
+  it('unrelated category does NOT add to activeCities', async () => {
     const p = new TestPipeline([
-      [ROCKET],
       [EARTHQUAKE],
     ]);
     const { getActiveCities } = p.addSensor(
-      ['פתח תקווה'], new Set(CATEGORY_MAP['rockets']), { timeout: 100 },
+      ['פתח תקווה'], new Set(CATEGORY_MAP['rockets']),
     );
 
     await p.poll();
-    getActiveCities().set('פתח תקווה', Date.now() - 200);
-
-    await p.poll(); // earthquake — should not refresh
-    assert.strictEqual(getActiveCities().size, 0, 'expired — earthquake did not refresh');
+    assert.strictEqual(getActiveCities().size, 0, 'earthquake not in rockets category');
   });
 
-  it('all-categories sensor gets refreshed by any category', async () => {
+  it('all-categories sensor gets activated by any category', async () => {
     const p = new TestPipeline([
-      [ROCKET],
       [NOTICE],
     ]);
-    const { getActiveCities } = p.addSensor(['פתח תקווה'], allCategoryIds(), { timeout: 100 });
+    const { getActiveCities } = p.addSensor(['פתח תקווה'], allCategoryIds());
 
     await p.poll();
-    getActiveCities().set('פתח תקווה', Date.now() - 200);
-
-    await p.poll(); // notice refreshes because all categories allowed
-    assert.strictEqual(getActiveCities().size, 1, 'notice refreshed all-categories sensor');
-    assert.ok(Date.now() - getActiveCities().get('פתח תקווה')! < 500);
+    assert.strictEqual(getActiveCities().size, 1, 'notice activates all-categories sensor');
   });
 
   it('Event Ended removes from activeCities regardless of sensor category', async () => {
@@ -414,27 +311,25 @@ describe('SensorFilter: independent activeCities per sensor', () => {
     assert.notStrictEqual(noticeAC(), rocketAC());
   });
 
-  it('expiry in one sensor does not affect other sensor timestamps', async () => {
-    // פתח תקווה is in both payloads
+  it('event ended clears both sensors independently', async () => {
     const p = new TestPipeline([
       [ROCKET, NOTICE],
-      [],
+      [makeEventEnded(['פתח תקווה'])],
     ]);
     const { getActiveCities: rocketAC } = p.addSensor(
-      ['פתח תקווה'], new Set(CATEGORY_MAP['rockets']), { timeout: 100 },
+      ['פתח תקווה'], new Set(CATEGORY_MAP['rockets']),
     );
     const { getActiveCities: noticeAC } = p.addSensor(
-      ['פתח תקווה'], new Set(CATEGORY_MAP['warning']), { timeout: 100 },
+      ['פתח תקווה'], new Set(CATEGORY_MAP['warning']),
     );
 
     await p.poll();
-
-    // Age only rocket sensor
-    rocketAC().set('פתח תקווה', Date.now() - 200);
+    assert.strictEqual(rocketAC().size, 1);
+    assert.strictEqual(noticeAC().size, 1);
 
     await p.poll();
-    assert.strictEqual(rocketAC().size, 0, 'rocket expired');
-    assert.strictEqual(noticeAC().size, 1, 'notice still active — independent timeout');
+    assert.strictEqual(rocketAC().size, 0, 'rocket cleared');
+    assert.strictEqual(noticeAC().size, 0, 'notice cleared');
   });
 });
 

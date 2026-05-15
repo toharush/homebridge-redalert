@@ -48,7 +48,7 @@ describe('HttpSource', () => {
     assert.deepStrictEqual(received[0], alerts);
   });
 
-  it('does not emit for empty alerts', async () => {
+  it('emits empty arrays to allow pipeline stages to run', async () => {
     const fetchFn = mock.fn(() => Promise.resolve([] as OrefRealtimeAlert[]));
     const log = createLogger();
     const source = new HttpSource(log, {
@@ -66,7 +66,8 @@ describe('HttpSource', () => {
     await new Promise((r) => setTimeout(r, 60));
     source.stop();
 
-    assert.strictEqual(received.length, 0);
+    assert.ok(received.length > 0);
+    assert.strictEqual(received[0].length, 0);
   });
 
   it('starts healthy', () => {

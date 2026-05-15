@@ -34,7 +34,8 @@ export class HealthCheckAccessory {
     this.service.updateCharacteristic(this.on, true);
   }
 
-  updateHealth(healthy: boolean): void {
+  updateHealth(status: { healthy: boolean }[]): void {
+    const healthy = status.some((s) => s.healthy);
     this.service.updateCharacteristic(this.on, healthy);
     if (healthy) {
       this.log.info('Health check: at least one source is reachable');

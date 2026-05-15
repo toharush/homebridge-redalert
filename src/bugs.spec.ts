@@ -167,35 +167,23 @@ describe('BUG #6: Invalid webhooks should be filtered out', () => {
 // BUG #7 — History writes every 5s even when unchanged (dirty flag)
 // ---------------------------------------------------------------------------
 
-describe('BUG #7: History dirty flag', () => {
-  it('should have isDirty() method that returns false when unchanged', () => {
+describe('BUG #7: History auto-persist', () => {
+  it('should persist after add()', () => {
     const history = new AlertHistory(100);
-    assert.strictEqual(typeof (history as any).isDirty, 'function', 'Must have isDirty method');
-    assert.strictEqual((history as any).isDirty(), false, 'New history is not dirty');
+    history.add('test', '1', 'Test', ['city1']);
+    assert.strictEqual(history.getAll().length, 1);
   });
 
-  it('should be dirty after add()', () => {
+  it('should persist after markEnded()', () => {
     const history = new AlertHistory(100);
-    history.add({
-      timestamp: Date.now(), source: 'test',
-      cat: '1', title: 'Test', cities: ['city1'], dedupResult: 'passed', status: 'active',
-    });
-    assert.strictEqual((history as any).isDirty(), true);
-  });
-
-  it('should be clean after clearDirty()', () => {
-    const history = new AlertHistory(100);
-    history.add({
-      timestamp: Date.now(), source: 'test',
-      cat: '1', title: 'Test', cities: ['city1'], dedupResult: 'passed', status: 'active',
-    });
-    (history as any).clearDirty();
-    assert.strictEqual((history as any).isDirty(), false);
+    history.add('test', '1', 'Test', ['city1']);
+    history.markEnded('city1');
+    assert.strictEqual(history.getAll()[0].status, 'ended');
   });
 });
 
 // ---------------------------------------------------------------------------
-// Dedup "passed" entries should have status: 'active' for UI filtering
+// Dedup passed entries should have status: 'active' in history
 // ---------------------------------------------------------------------------
 
 describe('Dedup passed entries have status active', () => {
@@ -213,12 +201,9 @@ describe('Dedup passed entries have status active', () => {
 
   it('markEnded should mark entries regardless of source name', () => {
     const history = new AlertHistory(100);
-    history.add({
-      timestamp: Date.now(), source: 'Pikud HaOref',
-      cat: '1', title: 'Rockets', cities: ['city1'], dedupResult: 'passed', status: 'active',
-    });
+    history.add('Pikud HaOref', '1', 'Rockets', ['city1']);
 
-    const result = history.markEnded('MySensor', 'city1');
+    const result = history.markEnded('city1');
     assert.ok(result);
     assert.strictEqual(history.getAll()[0].status, 'ended');
   });

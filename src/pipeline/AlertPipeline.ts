@@ -3,7 +3,8 @@ import { DebugLogger } from '../utils/debugLogger';
 import { AlertSource } from '../clients/AlertSource';
 import { PipelineStage } from './PipelineStage';
 import { AlertListener } from './AlertBus';
-import { parseAlerts } from '../services/SensorFilter';
+import { DeduplicationStage } from './DeduplicationStage';
+import { ExpiryStage } from './ExpiryStage';
 
 export interface SourceStatus {
   name: string;
@@ -15,22 +16,39 @@ export class AlertPipeline {
   private readonly sources: AlertSource[] = [];
   private readonly stages: PipelineStage[] = [];
   private readonly listeners: AlertListener[] = [];
+  private dedupStage: DeduplicationStage;
 
-  private healthCallback: ((healthy: boolean) => void) | null = null;
+  private healthCallback: ((status: SourceStatus[]) => void) | null = null;
   private lastHealthy = true;
 
-  constructor(private readonly log: DebugLogger) {}
+  constructor(private readonly log: DebugLogger) {
+    this.dedupStage = new DeduplicationStage();
+    this.stages.push(this.dedupStage);
+  }
 
   getSourceStatus(): SourceStatus[] {
     return this.sources.map((s) => ({ name: s.name, type: s.type, healthy: s.isHealthy() }));
   }
 
-  set onHealthChange(cb: (healthy: boolean) => void) {
+  set onHealthChange(cb: (status: SourceStatus[]) => void) {
     this.healthCallback = cb;
   }
 
   addStage(stage: PipelineStage): void {
-    this.stages.push(stage);
+    if (stage instanceof DeduplicationStage) {
+      const idx = this.stages.indexOf(this.dedupStage);
+      if (idx >= 0) {
+        this.stages.splice(idx, 1);
+      }
+      this.dedupStage = stage;
+      this.stages.push(stage);
+    } else if (stage instanceof ExpiryStage) {
+      stage.attachSeen(this.dedupStage.seen);
+      const dedupIdx = this.stages.indexOf(this.dedupStage);
+      this.stages.splice(dedupIdx, 0, stage);
+    } else {
+      this.stages.push(stage);
+    }
   }
 
   addSource(source: AlertSource): void {
@@ -72,22 +90,22 @@ export class AlertPipeline {
   }
 
   private ingest(sourceName: string, alerts: OrefRealtimeAlert[]): void {
-    if (alerts.length === 0) {
-      return;
-    }
-
     let current = alerts;
     const stages = this.stages;
     for (let i = 0; i < stages.length; i++) {
       current = stages[i].process(current, sourceName);
-      if (current.length === 0) {
-        return;
-      }
+    }
+
+    if (current.length === 0) {
+      return;
     }
 
     this.log.easyDebug(() => `[${sourceName}] ${current.length} alert(s): ${JSON.stringify(current)}`);
 
-    const parsed = parseAlerts(current);
+    const parsed = this.dedupStage.parsed;
+    if (!parsed) {
+      return;
+    }
     const listeners = this.listeners;
     for (let i = 0; i < listeners.length; i++) {
       listeners[i].handleAlerts(parsed);
@@ -95,10 +113,11 @@ export class AlertPipeline {
   }
 
   private evaluateHealth(): void {
-    const healthy = this.isHealthy();
+    const status = this.getSourceStatus();
+    const healthy = status.some((s) => s.healthy);
     if (healthy !== this.lastHealthy) {
       this.lastHealthy = healthy;
-      this.healthCallback?.(healthy);
+      this.healthCallback?.(status);
       if (healthy) {
         this.log.info('At least one source recovered — system healthy');
       } else {

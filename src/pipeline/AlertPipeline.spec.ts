@@ -53,6 +53,7 @@ describe('AlertPipeline', () => {
     const source = new MockSource();
     const received: ParsedAlerts[] = [];
 
+    pipeline.addStage(new DeduplicationStage());
     pipeline.addSource(source);
     pipeline.subscribe({ handleAlerts(p) {
       received.push(p);
@@ -113,6 +114,7 @@ describe('AlertPipeline', () => {
     };
 
     pipeline.addStage(filterStage);
+    pipeline.addStage(new DeduplicationStage());
     pipeline.addSource(source);
     pipeline.subscribe({ handleAlerts(p) {
       received.push(p);
@@ -148,15 +150,17 @@ describe('AlertPipeline', () => {
   it('fires onHealthChange when aggregate health changes', () => {
     const pipeline = new AlertPipeline(createLogger());
     const source = new MockSource();
-    const healthEvents: boolean[] = [];
+    const healthEvents: { name: string; healthy: boolean }[][] = [];
 
     pipeline.addSource(source);
-    pipeline.onHealthChange = (h) => healthEvents.push(h);
+    pipeline.onHealthChange = (status) => healthEvents.push(status);
 
     source.setHealth(false);
     source.setHealth(true);
 
-    assert.deepStrictEqual(healthEvents, [false, true]);
+    assert.strictEqual(healthEvents.length, 2);
+    assert.strictEqual(healthEvents[0][0].healthy, false);
+    assert.strictEqual(healthEvents[1][0].healthy, true);
   });
 
   it('two sources emit same alert simultaneously — listener fires only once', () => {

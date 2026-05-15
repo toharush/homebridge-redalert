@@ -1,69 +1,81 @@
+import * as fs from 'fs';
+import { ParsedAlerts, AlertListener } from '../services/SensorFilter';
+
 export interface AlertHistoryEntry {
   timestamp: number;
   source: string;
   cat: string;
   title: string;
-  cities: string[];
-  dedupResult: 'passed' | 'dropped';
-  status?: 'active' | 'ended';
+  city: string;
+  status: 'active' | 'ended';
 }
 
-export class AlertHistory {
-  private readonly entries: AlertHistoryEntry[] = [];
+export class AlertHistory implements AlertListener {
+  private readonly entries = new Map<string, AlertHistoryEntry>();
   private readonly maxSize: number;
-  private dirty = false;
+  private readonly filePath: string | null;
 
-  constructor(maxSize: number = 20) {
+  constructor(maxSize: number = 1000, filePath?: string) {
     this.maxSize = maxSize;
+    this.filePath = filePath ?? null;
   }
 
-  add(entry: AlertHistoryEntry): void {
-    if (entry.status === 'active') {
-      for (const existing of this.entries) {
-        if (existing.status === 'active' && existing.cat === entry.cat
-          && entry.cities.every((c) => existing.cities.includes(c))) {
-          existing.timestamp = entry.timestamp;
-          this.dirty = true;
-          return;
-        }
+  handleAlerts(parsed: ParsedAlerts): void {
+    const { endedCities } = parsed;
+    if (endedCities.size > 0) {
+      for (const city of endedCities) {
+        this.markEnded(city);
       }
     }
-    this.entries.unshift(entry);
-    if (this.entries.length > this.maxSize) {
-      this.entries.length = this.maxSize;
-    }
-    this.dirty = true;
   }
 
-  markEnded(_source: string, city: string, cat?: string): boolean {
+  add(source: string, cat: string, title: string, cities: string[]): void {
+    const now = Date.now();
+    for (const city of cities) {
+      const key = `${cat}:${city}`;
+      this.entries.set(key, { timestamp: now, source, cat, title, city, status: 'active' });
+    }
+    if (this.entries.size > this.maxSize) {
+      const overflow = this.entries.size - this.maxSize;
+      const iter = this.entries.keys();
+      for (let i = 0; i < overflow; i++) {
+        this.entries.delete(iter.next().value!);
+      }
+    }
+    this.persist();
+  }
+
+  markEnded(city: string): boolean {
     let found = false;
-    for (const entry of this.entries) {
-      if (entry.status === 'active' && entry.cities.includes(city)
-        && (cat === undefined || entry.cat === cat)) {
+    for (const [, entry] of this.entries) {
+      if (entry.status === 'active' && entry.city === city) {
         entry.status = 'ended';
         found = true;
       }
     }
     if (found) {
-      this.dirty = true;
+      this.persist();
     }
     return found;
   }
 
-  isDirty(): boolean {
-    return this.dirty;
-  }
-
-  clearDirty(): void {
-    this.dirty = false;
-  }
-
   getAll(): AlertHistoryEntry[] {
-    return this.entries;
+    return [...this.entries.values()].reverse();
   }
 
   clear(): void {
-    this.entries.length = 0;
-    this.dirty = true;
+    this.entries.clear();
+    this.persist();
+  }
+
+  private persist(): void {
+    if (!this.filePath) {
+      return;
+    }
+    const tmp = this.filePath + '.tmp';
+    const data = [...this.entries.values()];
+    fs.promises.writeFile(tmp, JSON.stringify(data))
+      .then(() => fs.promises.rename(tmp, this.filePath!))
+      .catch(() => {});
   }
 }

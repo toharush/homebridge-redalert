@@ -9,11 +9,11 @@ import _ from 'lodash';
 import { CATEGORY_MAP, ALL_CATEGORY_KEYS, SensorConfig } from './types';
 import { validateConfig } from './utils/configValidator';
 import { createDebugLogger, DebugLogger } from './utils/debugLogger';
-import { AlertPipeline, DeduplicationStage, AlertHistory } from './pipeline';
-import * as fs from 'fs';
+import { AlertPipeline, ExpiryStage, DeduplicationStage, AlertHistory } from './pipeline';
 import * as path from 'path';
 import { SensorFilter } from './services/SensorFilter';
 import { WebhookService, WebhookConfig } from './services/WebhookService';
+import { HealthStatusService } from './services/HealthStatusService';
 import { OrefClient } from './clients/orefClient';
 import { HttpSource, HttpSourceConfig } from './clients/httpSource';
 import { WebSocketSource, WebSocketSourceConfig } from './clients/webSocketSource';
@@ -32,8 +32,6 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
   private readonly sensorAccessories: MotionSensorAccessory[] = [];
   private pipeline: AlertPipeline | null = null;
   private history: AlertHistory | null = null;
-  private statusTimer: ReturnType<typeof setInterval> | null = null;
-  private readonly statusFilePath: string;
   private readonly historyFilePath: string;
 
   constructor(
@@ -44,7 +42,6 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
     this.log = createDebugLogger(logger, _.get(config, 'debug', false));
-    this.statusFilePath = path.join(api.user.storagePath(), 'redalert-status.json');
     this.historyFilePath = path.join(api.user.storagePath(), 'redalert-history.json');
 
     migrateConfig(api.user.configPath(), this.log);
@@ -56,7 +53,6 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
 
     const pollingInterval = _.get(config, 'polling_interval', DEFAULT_POLLING_INTERVAL);
     const requestTimeout = _.get(config, 'request_timeout', DEFAULT_REQUEST_TIMEOUT);
-    const globalAlertTimeout = _.get(config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT);
     const turnoffDelay = _.get(config, 'turnoff_delay', DEFAULT_TURNOFF_DELAY);
     const healthCheckThreshold = _.get(config, 'health_check_threshold', DEFAULT_HEALTH_CHECK_THRESHOLD);
     const reconnectInterval = _.get(config, 'reconnect_interval', 10000);
@@ -76,25 +72,16 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
 
     this.api.on('didFinishLaunching', () => {
       this.log.easyDebug('Executed didFinishLaunching callback');
-      this.discoverDevices(this.pipeline!, validated.sensors, globalAlertTimeout, turnoffDelay, webhook);
+      this.discoverDevices(this.pipeline!, validated.sensors, turnoffDelay, webhook);
     });
 
     this.api.on('shutdown', () => this.shutdown());
   }
 
   shutdown() {
-    if (this.statusTimer) {
-      clearInterval(this.statusTimer);
-      this.statusTimer = null;
-    }
     this.pipeline?.stop();
     for (const accessory of this.sensorAccessories) {
       accessory.destroy();
-    }
-    try {
-      fs.unlinkSync(this.statusFilePath);
-    } catch {
-      // ignore
     }
   }
 
@@ -106,7 +93,6 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
   private discoverDevices(
     pipeline: AlertPipeline,
     sensors: SensorConfig[],
-    globalAlertTimeout: number,
     turnoffDelay: number,
     webhook: WebhookService | null,
   ) {
@@ -128,7 +114,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       this.sensorAccessories.push(sensorAccessory);
       const filter = new SensorFilter(
         sensor.name, this.log, sensorAccessory, cities,
-        allowedCategories, globalAlertTimeout, prefixMatching, this.history!, webhook ?? undefined,
+        allowedCategories, prefixMatching, webhook ?? undefined,
       );
       pipeline.subscribe(filter);
 
@@ -137,41 +123,26 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       );
     }
 
+    const statusService = new HealthStatusService(
+      path.join(this.api.user.storagePath(), 'redalert-status.json'),
+    );
+
     if (_.get(this.config, 'health_check', false)) {
       const healthAccessory = this.resolveAccessory('Red Alert Health');
       activeUUIDs.add(healthAccessory.UUID);
       const healthCheck = new HealthCheckAccessory(this.log, this, healthAccessory);
-      pipeline.onHealthChange = (healthy) => healthCheck.updateHealth(healthy);
+      pipeline.onHealthChange = (status) => {
+        healthCheck.updateHealth(status);
+        statusService.update(status);
+      };
       this.log.info('Health check sensor enabled');
+    } else {
+      pipeline.onHealthChange = (status) => statusService.update(status);
     }
 
     this.removeStaleAccessories(activeUUIDs);
     pipeline.start();
-    this.writeStatus();
-    this.statusTimer = setInterval(() => this.writeStatus(), 5000);
     this.log.info('Red Alert is running. You may close the config window.');
-  }
-
-  private writeStatus(): void {
-    try {
-      const status = this.pipeline?.getSourceStatus() ?? [];
-      const tmpStatus = this.statusFilePath + '.tmp';
-      fs.writeFileSync(tmpStatus, JSON.stringify(status));
-      fs.renameSync(tmpStatus, this.statusFilePath);
-    } catch {
-      // ignore
-    }
-    if (this.history?.isDirty()) {
-      try {
-        const entries = this.history.getAll();
-        const tmpHistory = this.historyFilePath + '.tmp';
-        fs.writeFileSync(tmpHistory, JSON.stringify(entries));
-        fs.renameSync(tmpHistory, this.historyFilePath);
-        this.history.clearDirty();
-      } catch {
-        // ignore
-      }
-    }
   }
 
   private buildPipeline(
@@ -182,9 +153,11 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     ws: { reconnectInterval: number; maxReconnectInterval: number; pingInterval: number; pongTimeout: number },
   ): AlertPipeline {
     const pipeline = new AlertPipeline(this.log);
-    this.history = new AlertHistory(1000);
+    this.history = new AlertHistory(1000, this.historyFilePath);
 
-    pipeline.addStage(new DeduplicationStage(30000, this.log, this.history, _.get(this.config, 'debug', false)));
+    pipeline.addStage(new DeduplicationStage(30000, undefined, this.history));
+    pipeline.addStage(new ExpiryStage(_.get(this.config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT)));
+    pipeline.subscribe(this.history);
 
     const orefClient = new OrefClient(requestTimeout);
     pipeline.addSource(new HttpSource(this.log, {
