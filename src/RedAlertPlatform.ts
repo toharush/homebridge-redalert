@@ -14,7 +14,7 @@ import { SensorFilter } from './services/SensorFilter';
 import { OrefClient } from './clients/orefClient';
 import { HttpSource, HttpSourceConfig } from './clients/httpSource';
 import { WebSocketSource, WebSocketSourceConfig } from './clients/webSocketSource';
-import { CategoryMapping } from './clients/categoryMapper';
+import { CategoryMapping, DEFAULT_RESPONSE_FORMAT } from './clients/categoryMapper';
 import { parseTzofarMessage } from './clients/tzofarParser';
 import { MotionSensorAccessory } from './accessories/MotionSensorAccessory';
 import { HealthCheckAccessory } from './accessories/HealthCheckAccessory';
@@ -138,7 +138,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
   ): AlertPipeline {
     const pipeline = new AlertPipeline(this.log);
 
-    pipeline.addStage(new DeduplicationStage());
+    pipeline.addStage(new DeduplicationStage(30000, this.log));
 
     const orefClient = new OrefClient(requestTimeout, this.log);
     pipeline.addSource(new HttpSource(this.log, {
@@ -165,6 +165,9 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
 
     for (const src of customSources) {
       const mapping: CategoryMapping = src.category_mapping ?? {};
+      const responseFormat = src.response_format ?? (src.category_field
+        ? { ...DEFAULT_RESPONSE_FORMAT, category_field: src.category_field }
+        : undefined);
       if (src.type === 'http') {
         const config: HttpSourceConfig = {
           name: src.name ?? 'custom-http',
@@ -174,7 +177,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
           requestTimeout: src.request_timeout ?? requestTimeout,
           failureThreshold: src.failure_threshold ?? healthCheckThreshold,
           categoryMapping: mapping,
-          responseFormat: src.response_format,
+          responseFormat,
         };
         pipeline.addSource(new HttpSource(this.log, config));
       } else if (src.type === 'websocket') {
@@ -186,7 +189,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
           maxReconnectInterval: src.max_reconnect_interval ?? ws.maxReconnectInterval,
           failureThreshold: src.failure_threshold ?? healthCheckThreshold,
           categoryMapping: mapping,
-          responseFormat: src.response_format,
+          responseFormat,
           pingInterval: src.ping_interval ?? ws.pingInterval,
           pongTimeout: src.pong_timeout ?? ws.pongTimeout,
           messageType: src.message_type,

@@ -1247,6 +1247,124 @@ describe('health tracking', () => {
   });
 });
 
+describe('multi-source deduplication', () => {
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('Tzofar arrives first, Pikud HaOref 5s later — sensor triggers once', async () => {
+    const log = createMockLogger();
+    const pipeline = new AlertPipeline(log);
+    const { DeduplicationStage } = await import('../pipeline/DeduplicationStage');
+    pipeline.addStage(new DeduplicationStage(30000, log));
+
+    const sensor = createMockAccessory();
+    pipeline.subscribe(new SensorFilter('Home', log, sensor, ['שומרה'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+
+    const tzofarAlert: OrefRealtimeAlert = {
+      id: 'tzofar-1778835536091', cat: '6', title: 'Threat 5', data: ['שומרה'], desc: '',
+    };
+    const orefAlert: OrefRealtimeAlert = {
+      id: '134233091340000000', cat: '6', title: 'חדירת כלי טיס עוין', data: ['שומרה'], desc: 'היכנסו מייד למרחב המוגן',
+    };
+
+    // Simulate Tzofar WebSocket delivering first
+    (pipeline as any).ingest('Tzofar', [tzofarAlert]);
+    assert.strictEqual(sensor.lastState!.isActive, true, 'Tzofar triggers sensor');
+
+    // Simulate Pikud HaOref HTTP arriving ~5s later (same window)
+    (pipeline as any).ingest('Pikud HaOref', [orefAlert]);
+
+    // Sensor should still be active but handleAlerts should only have been called once
+    assert.strictEqual(sensor.lastState!.isActive, true);
+    assert.strictEqual(sensor.lastState!.activeCities.size, 1);
+    assert.ok(sensor.lastState!.activeCities.has('שומרה'));
+
+    // Verify dedup logs show winner and drop
+    const debugCalls = log.easyDebug.mock.calls.map((c: any) => {
+      const arg = c.arguments[0];
+      return typeof arg === 'function' ? arg() : arg;
+    });
+    assert.ok(debugCalls.some((m: string) => m.includes('WINNER') && m.includes('Tzofar')));
+    assert.ok(debugCalls.some((m: string) => m.includes('DROP') && m.includes('Pikud HaOref')));
+  });
+
+  it('both sources send event-ended — sensor deactivates on first, second is harmless', async () => {
+    const log = createMockLogger();
+    const pipeline = new AlertPipeline(log);
+    const { DeduplicationStage } = await import('../pipeline/DeduplicationStage');
+    pipeline.addStage(new DeduplicationStage(30000, log));
+
+    const sensor = createMockAccessory();
+    pipeline.subscribe(new SensorFilter('Home', log, sensor, ['שומרה'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+
+    // First activate
+    (pipeline as any).ingest('Tzofar', [
+      { id: 'tzofar-1', cat: '6', title: 'UAV', data: ['שומרה'], desc: '' },
+    ]);
+    assert.strictEqual(sensor.lastState!.isActive, true);
+
+    // Tzofar event-ended
+    (pipeline as any).ingest('Tzofar', [
+      { id: 'tzofar-exit-1', cat: '99', title: 'סיום אירוע', data: ['שומרה'], desc: '' },
+    ]);
+    assert.strictEqual(sensor.lastState!.isActive, false);
+
+    // Pikud HaOref event-ended (also passes — cat 99 is never deduped)
+    (pipeline as any).ingest('Pikud HaOref', [
+      { id: 'oref-exit-1', cat: '99', title: 'האירוע הסתיים', data: ['שומרה'], desc: '' },
+    ]);
+    assert.strictEqual(sensor.lastState!.isActive, false);
+  });
+
+  it('nationwide from Tzofar + specific cities from Oref — sensor activates once', async () => {
+    const log = createMockLogger();
+    const pipeline = new AlertPipeline(log);
+    const { DeduplicationStage } = await import('../pipeline/DeduplicationStage');
+    pipeline.addStage(new DeduplicationStage(30000, log));
+
+    const sensor = createMockAccessory();
+    pipeline.subscribe(new SensorFilter('Home', log, sensor, ['שומרה', 'זרעית'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+
+    // Tzofar early warning falls back to nationwide
+    (pipeline as any).ingest('Tzofar', [
+      { id: 'tz-ew-1', cat: '8', title: 'מבזק פיקוד העורף', data: ['רחבי הארץ'], desc: '' },
+    ]);
+    assert.strictEqual(sensor.lastState!.isActive, true, 'nationwide activates all configured cities');
+    assert.strictEqual(sensor.lastState!.activeCities.size, 2);
+
+    // Pikud HaOref sends specific cities (different keys — not deduped)
+    (pipeline as any).ingest('Pikud HaOref', [
+      { id: 'oref-1', cat: '8', title: 'התרעה מוקדמת', data: ['שומרה', 'זרעית'], desc: '' },
+    ]);
+    // Sensor stays active, cities already active — just a timestamp refresh
+    assert.strictEqual(sensor.lastState!.isActive, true);
+    assert.strictEqual(sensor.lastState!.activeCities.size, 2);
+  });
+
+  it('different cities from two sources both pass dedup', async () => {
+    const log = createMockLogger();
+    const pipeline = new AlertPipeline(log);
+    const { DeduplicationStage } = await import('../pipeline/DeduplicationStage');
+    pipeline.addStage(new DeduplicationStage(30000, log));
+
+    const sensor = createMockAccessory();
+    pipeline.subscribe(new SensorFilter('North', log, sensor, ['שומרה', 'זרעית'], allCategoryIds(), DEFAULT_ALERT_TIMEOUT, false));
+
+    (pipeline as any).ingest('Tzofar', [
+      { id: 'tz-1', cat: '6', title: 'UAV', data: ['שומרה'], desc: '' },
+    ]);
+    assert.strictEqual(sensor.lastState!.activeCities.size, 1);
+
+    (pipeline as any).ingest('Pikud HaOref', [
+      { id: 'oref-1', cat: '6', title: 'חדירת כלי טיס', data: ['זרעית'], desc: '' },
+    ]);
+    assert.strictEqual(sensor.lastState!.activeCities.size, 2);
+    assert.ok(sensor.lastState!.activeCities.has('שומרה'));
+    assert.ok(sensor.lastState!.activeCities.has('זרעית'));
+  });
+});
+
 describe('performance', () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;

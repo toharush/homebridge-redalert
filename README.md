@@ -162,6 +162,7 @@ You can add custom HTTP or WebSocket sources via the UI or `config.json`. Custom
       "type": "http",
       "url": "https://my-alert-api.example.com/alerts",
       "headers": { "Authorization": "Bearer ..." },
+      "category_field": "type",
       "category_mapping": {
         "ROCKET": "rockets",
         "DRONE": "uav"
@@ -173,6 +174,7 @@ You can add custom HTTP or WebSocket sources via the UI or `config.json`. Custom
       "url": "wss://my-ws-feed.example.com/alerts",
       "message_type": "ALERT",
       "message_data_field": "data",
+      "category_field": "threat",
       "category_mapping": {
         "1": "rockets",
         "2": "uav"
@@ -181,6 +183,8 @@ You can add custom HTTP or WebSocket sources via the UI or `config.json`. Custom
   ]
 }
 ```
+
+`category_field` tells the plugin which JSON field holds the category ID in each alert object (defaults to `"cat"`). Then `category_mapping` maps each ID value from your source to a plugin alert type. For reference: Pikud HaOref uses field `cat` with values `1`=rockets, `6`=uav; Tzofar uses field `threat` with values `0`=rockets, `5`=uav.
 
 ---
 

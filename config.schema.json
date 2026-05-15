@@ -170,9 +170,15 @@
               "type": "object",
               "additionalProperties": { "type": "string" }
             },
+            "category_field": {
+              "title": "Category ID Field",
+              "description": "The JSON field name in each alert object that holds the category ID. For example: Pikud HaOref uses 'cat', Tzofar uses 'threat'.",
+              "type": "string",
+              "default": "cat"
+            },
             "category_mapping": {
               "title": "Category Mapping",
-              "description": "Map source-specific category values to plugin categories.",
+              "description": "Map each category ID value from your source to a plugin alert type. Example: if your source sends '1' for rockets, add '1' → rockets.",
               "type": "object",
               "additionalProperties": {
                 "type": "string",

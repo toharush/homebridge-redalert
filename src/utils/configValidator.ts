@@ -47,5 +47,12 @@ function validateCustomSources(config: PlatformConfig, log: Logger): void {
         log.warn(`[${label}] reconnect_interval must be >= 1000ms`);
       }
     }
+
+    if (!src.category_mapping || Object.keys(src.category_mapping).length === 0) {
+      log.warn(
+        `[${label}] No category_mapping defined — this source will not produce any alerts. `
+        + 'Add at least one mapping (e.g. "1" → "rockets").',
+      );
+    }
   }
 }

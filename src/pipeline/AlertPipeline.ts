@@ -69,7 +69,7 @@ export class AlertPipeline {
     let current = alerts;
     const stages = this.stages;
     for (let i = 0; i < stages.length; i++) {
-      current = stages[i].process(current);
+      current = stages[i].process(current, sourceName);
       if (current.length === 0) {
         return;
       }

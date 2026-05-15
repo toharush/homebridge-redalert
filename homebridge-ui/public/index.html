@@ -2,8 +2,13 @@
   rel="stylesheet"
   href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css"
 />
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"
+/>
 <link rel="stylesheet" href="style.css" />
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
 
 <div id="app">
   <div class="disclaimer-box">
@@ -83,18 +88,18 @@
           </tr>
         </table>
         <div class="mapping-title">Category Mapping</div>
-        <div class="mapping-note">Native &mdash; Oref uses numeric category IDs directly</div>
+        <div class="mapping-note">Category ID field: <code>cat</code></div>
         <table class="mapping-table">
-          <tr><td>cat 1</td><td>&#8594;</td><td>rockets</td></tr>
-          <tr><td>cat 2</td><td>&#8594;</td><td>nonconventional</td></tr>
-          <tr><td>cat 3</td><td>&#8594;</td><td>earthquake</td></tr>
-          <tr><td>cat 4</td><td>&#8594;</td><td>cbrne</td></tr>
-          <tr><td>cat 5</td><td>&#8594;</td><td>tsunami</td></tr>
-          <tr><td>cat 6</td><td>&#8594;</td><td>uav</td></tr>
-          <tr><td>cat 7</td><td>&#8594;</td><td>hazmat</td></tr>
-          <tr><td>cat 8</td><td>&#8594;</td><td>warning</td></tr>
-          <tr><td>cat 10</td><td>&#8594;</td><td>warning (heads-up notice)</td></tr>
-          <tr><td>cat 13</td><td>&#8594;</td><td>terror</td></tr>
+          <tr><td>1</td><td>&#8594;</td><td>rockets</td></tr>
+          <tr><td>2</td><td>&#8594;</td><td>nonconventional</td></tr>
+          <tr><td>3</td><td>&#8594;</td><td>earthquake</td></tr>
+          <tr><td>4</td><td>&#8594;</td><td>cbrne</td></tr>
+          <tr><td>5</td><td>&#8594;</td><td>tsunami</td></tr>
+          <tr><td>6</td><td>&#8594;</td><td>uav</td></tr>
+          <tr><td>7</td><td>&#8594;</td><td>hazmat</td></tr>
+          <tr><td>8</td><td>&#8594;</td><td>warning</td></tr>
+          <tr><td>10</td><td>&#8594;</td><td>warning (heads-up notice)</td></tr>
+          <tr><td>13</td><td>&#8594;</td><td>terror</td></tr>
         </table>
       </div>
     </div>
@@ -140,12 +145,12 @@
           </tr>
         </table>
         <div class="mapping-title">Category Mapping</div>
-        <div class="mapping-note">Tzofar uses <code>threat</code> IDs in ALERT messages</div>
+        <div class="mapping-note">Category ID field: <code>threat</code></div>
         <table class="mapping-table">
-          <tr><td>threat 0</td><td>&#8594;</td><td>rockets</td></tr>
-          <tr><td>threat 2</td><td>&#8594;</td><td>terror</td></tr>
-          <tr><td>threat 5</td><td>&#8594;</td><td>uav</td></tr>
-          <tr><td>threat 7</td><td>&#8594;</td><td>nonconventional</td></tr>
+          <tr><td>0</td><td>&#8594;</td><td>rockets</td></tr>
+          <tr><td>2</td><td>&#8594;</td><td>terror</td></tr>
+          <tr><td>5</td><td>&#8594;</td><td>uav</td></tr>
+          <tr><td>7</td><td>&#8594;</td><td>nonconventional</td></tr>
         </table>
         <div class="mapping-note" style="margin-top: 6px">SYSTEM_MESSAGE parsing</div>
         <table class="mapping-table">
@@ -158,12 +163,19 @@
   <div id="addon-sources-container"></div>
   <button class="btn-add" onclick="addAddonSource()">+ Add Source</button>
 
+  <!-- Map -->
+  <div class="section-title" style="margin-top: 24px">Coverage Map</div>
+  <div id="city-map"></div>
+  <div id="map-legend"></div>
+
   <!-- Sensors Section -->
   <div class="section-title" style="margin-top: 24px">Sensors</div>
   <div id="sensors-container"></div>
   <button class="btn-add" onclick="addSensor()">+ Add Sensor</button>
 
   <br />
+  <button class="btn-save" onclick="saveConfig()">Save</button>
+
   <span class="advanced-toggle" onclick="toggleAdvanced()"
     >&#9654; Advanced Settings</span
   >
@@ -412,24 +424,33 @@
         </div>
         <div class="field-group">
           <label>Category Mapping</label>
+          <div class="help-text" style="margin-bottom:8px;">
+            Which field in the source's response holds the category ID?
+            Then map each ID value to a plugin alert type.<br>
+            Example: Pikud HaOref uses field <code>cat</code> with values like <code>1</code> = rockets, <code>6</code> = uav.
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-weight:500;font-size:0.85em;">Category ID Field (required)</label>
+            <input type="text" class="addon-cat-field" value="${escapeHtml(source.category_field || "cat")}" placeholder="e.g. cat, threat, type">
+            <div class="help-text">The JSON field name in each alert object that contains the category ID.</div>
+          </div>
           <div class="category-mapping-rows" id="catmap-${id}">
             ${Object.entries(source.category_mapping || {})
               .map(
                 ([k, v]) => `
               <div class="catmap-row" style="display:flex;gap:6px;margin-bottom:4px;align-items:center;">
-                <input type="text" class="catmap-key" value="${escapeHtml(k)}" placeholder="Source value" style="flex:1;padding:4px 8px;border-radius:4px;">
+                <input type="text" class="catmap-key" value="${escapeHtml(k)}" placeholder="ID value (e.g. 1, ROCKET)" style="flex:1;padding:4px 8px;border-radius:4px;">
                 <span style="color:var(--text-muted);">&#8594;</span>
                 <select class="catmap-value" style="flex:1;padding:4px 8px;border-radius:4px;">
                   ${CATEGORIES.map((c) => `<option value="${c.key}" ${v === c.key ? "selected" : ""}>${c.label}</option>`).join("")}
                 </select>
-                <button type="button" onclick="this.parentElement.remove();saveConfig();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
+                <button type="button" onclick="this.parentElement.remove();markDirty();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
               </div>
             `,
               )
               .join("")}
           </div>
           <button type="button" onclick="addCatmapRow(${id})" style="font-size:0.8em;background:none;border:1px solid var(--border-input);border-radius:4px;padding:2px 10px;cursor:pointer;margin-top:4px;">+ Add mapping</button>
-          <div class="help-text">Map source-specific category values to alert types.</div>
         </div>
         <div class="field-group">
           <label>Headers (JSON, optional)</label>
@@ -457,7 +478,7 @@
         (f) =>
           (f.style.display = typeSelect.value === "websocket" ? "" : "none"),
       );
-      saveConfig();
+      markDirty();
     });
 
     saveOnChange();
@@ -470,12 +491,12 @@
       url: "",
       category_mapping: {},
     });
-    saveConfig();
+    markDirty();
   }
 
   function removeAddonSource(id) {
     document.getElementById(`addon-source-${id}`).remove();
-    saveConfig();
+    markDirty();
   }
 
   function addCatmapRow(addonId) {
@@ -485,12 +506,12 @@
     row.style.cssText =
       "display:flex;gap:6px;margin-bottom:4px;align-items:center;";
     row.innerHTML = `
-      <input type="text" class="catmap-key" value="" placeholder="Source value" style="flex:1;padding:4px 8px;border-radius:4px;">
+      <input type="text" class="catmap-key" value="" placeholder="ID value (e.g. 1, ROCKET)" style="flex:1;padding:4px 8px;border-radius:4px;">
       <span style="color:var(--text-muted);">&#8594;</span>
       <select class="catmap-value" style="flex:1;padding:4px 8px;border-radius:4px;">
         ${CATEGORIES.map((c) => `<option value="${c.key}">${c.label}</option>`).join("")}
       </select>
-      <button type="button" onclick="this.parentElement.remove();saveConfig();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
+      <button type="button" onclick="this.parentElement.remove();markDirty();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
     `;
     container.appendChild(row);
     saveOnChange();
@@ -503,11 +524,14 @@
     const sources = [];
     cards.forEach((card) => {
       const type = card.querySelector(".addon-type").value;
+      const catField = card.querySelector(".addon-cat-field").value.trim();
       const source = {
         name: card.querySelector(".addon-name").value.trim(),
         type,
         url: card.querySelector(".addon-url").value.trim(),
       };
+
+      if (catField && catField !== "cat") source.category_field = catField;
 
       const mapping = {};
       card.querySelectorAll(".catmap-row").forEach((row) => {
@@ -650,7 +674,8 @@
       delete tomInstances[id];
     }
     document.getElementById(`sensor-${id}`).remove();
-    saveConfig();
+    markDirty();
+    updateMapMarkers();
   }
 
   // --- Config ---
@@ -719,20 +744,37 @@
       const config = collectConfig();
       await homebridge.updatePluginConfig([config]);
       updateBuiltinCards();
+      markClean();
       homebridge.toast.success("Configuration saved successfully.");
     } catch (e) {
       homebridge.toast.error("Failed to save configuration.");
     }
   }
 
+  function markDirty() {
+    if (initializing) return;
+    const btn = document.querySelector(".btn-save");
+    if (btn) btn.classList.add("dirty");
+  }
+
+  function markClean() {
+    const btn = document.querySelector(".btn-save");
+    if (btn) btn.classList.remove("dirty");
+  }
+
   function saveOnChange() {
     document.querySelectorAll("input, select").forEach((el) => {
-      el.removeEventListener("change", saveConfig);
-      el.addEventListener("change", saveConfig);
+      el.removeEventListener("change", markDirty);
+      el.addEventListener("change", markDirty);
+    });
+    document.querySelectorAll(".sensor-name").forEach((el) => {
+      el.removeEventListener("input", updateMapMarkers);
+      el.addEventListener("input", updateMapMarkers);
     });
     Object.values(tomInstances).forEach((ts) => {
       ts.off("change");
-      ts.on("change", saveConfig);
+      ts.on("change", markDirty);
+      ts.on("change", updateMapMarkers);
     });
   }
 
@@ -772,5 +814,113 @@
     return div.innerHTML;
   }
 
-  init();
+  // --- Map ---
+  let map = null;
+  let mapMarkers = [];
+  const ISRAEL_CENTER = [31.5, 34.9];
+  const ISRAEL_ZOOM = 8;
+  const SENSOR_COLORS = [
+    "#dc3545", "#0d6efd", "#198754", "#fd7e14",
+    "#6f42c1", "#20c997", "#e91e8b", "#6c757d",
+  ];
+
+  function initMap() {
+    const el = document.getElementById("city-map");
+    if (!el) return;
+    map = L.map("city-map", { scrollWheelZoom: true }).setView(ISRAEL_CENTER, ISRAEL_ZOOM);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OSM",
+      maxZoom: 16,
+    }).addTo(map);
+  }
+
+  function getSensorColor(index) {
+    return SENSOR_COLORS[index % SENSOR_COLORS.length];
+  }
+
+  function updateMapMarkers() {
+    if (!map) return;
+    mapMarkers.forEach((m) => map.removeLayer(m));
+    mapMarkers = [];
+
+    const sensorCards = document.querySelectorAll(".sensor-card");
+    const cityToSensors = new Map();
+    const sensorNames = [];
+
+    sensorCards.forEach((card, idx) => {
+      const id = card.id.replace("sensor-", "");
+      const name = card.querySelector(".sensor-name").value.trim() || `Sensor ${idx + 1}`;
+      sensorNames.push(name);
+      const selectedCities = tomInstances[id] ? tomInstances[id].getValue() : [];
+      const cityList = Array.isArray(selectedCities) ? selectedCities : [selectedCities];
+      cityList.forEach((cityName) => {
+        if (!cityName) return;
+        if (!cityToSensors.has(cityName)) {
+          cityToSensors.set(cityName, []);
+        }
+        cityToSensors.get(cityName).push({ index: idx, name });
+      });
+    });
+
+    // Update legend
+    const legend = document.getElementById("map-legend");
+    if (sensorNames.length > 0 && cityToSensors.size > 0) {
+      legend.innerHTML = sensorNames
+        .map((name, i) => `<div class="map-legend-item"><span class="map-legend-dot" style="background:${getSensorColor(i)}"></span>${escapeHtml(name)}</div>`)
+        .join("");
+    } else {
+      legend.innerHTML = "";
+    }
+
+    // Update map class
+    const mapEl = document.getElementById("city-map");
+    if (cityToSensors.size === 0) {
+      mapEl.classList.add("empty-map");
+      map.setView(ISRAEL_CENTER, ISRAEL_ZOOM);
+      return;
+    }
+    mapEl.classList.remove("empty-map");
+
+    const bounds = [];
+    const cityGeo = new Map();
+    cities.forEach((c) => {
+      if (c.lat && c.lng) cityGeo.set(c.name, { lat: c.lat, lng: c.lng });
+    });
+
+    cityToSensors.forEach((sensors, cityName) => {
+      const geo = cityGeo.get(cityName);
+      if (!geo) return;
+
+      const primarySensor = sensors[0];
+      const color = getSensorColor(primarySensor.index);
+      const sensorList = sensors.map((s) => s.name).join(", ");
+      const tooltip = `<strong>${cityName}</strong><br><span style="font-size:0.85em;color:#666">${sensorList}</span>`;
+
+      const marker = L.circleMarker([geo.lat, geo.lng], {
+        radius: sensors.length > 1 ? 9 : 7,
+        fillColor: color,
+        color: sensors.length > 1 ? "#ffd700" : "#fff",
+        weight: sensors.length > 1 ? 2.5 : 2,
+        fillOpacity: 0.85,
+      })
+        .bindTooltip(tooltip, { direction: "top", offset: [0, -8] })
+        .addTo(map);
+
+      mapMarkers.push(marker);
+      bounds.push([geo.lat, geo.lng]);
+    });
+
+    if (bounds.length > 0) {
+      if (bounds.length === 1) {
+        map.setView(bounds[0], 12);
+      } else {
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 });
+      }
+    }
+  }
+
+  init().then(() => {
+    initMap();
+    updateMapMarkers();
+  });
 </script>
