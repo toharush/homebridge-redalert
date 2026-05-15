@@ -61,10 +61,10 @@
 | Dependencies | lodash | lodash + ws | +1 production dep (~200 KB) |
 | Disk I/O | None | Status + history (on change only) | Async non-blocking writes |
 | Recovery time | Up to polling interval | WebSocket: instant reconnect with backoff; HTTP: next poll cycle | Dual-source redundancy |
-| Performance | Baseline | 0.74–0.91x (faster) | Pipeline overhead is negative at ≤50 alerts |
-| Test coverage | ~60 tests | 270 tests | 4.5x increase |
+| Performance | Baseline | 0.61–0.86x (faster) | Pipeline overhead is negative at ≤50 alerts |
+| Test coverage | ~60 tests | 251 tests | 4x increase |
 
-**Bottom line:** v2 is **9-26% faster** than v1 for realistic workloads (≤50 simultaneous alerts) while adding deduplication, automatic expiry, and full alert history. The pipeline eliminates redundant parsing by building `ParsedAlerts` as a free side effect of dedup.
+**Bottom line:** v2 is **14-39% faster** than v1 for realistic workloads (≤50 simultaneous alerts) while adding deduplication, automatic expiry, and full alert history. The pipeline eliminates redundant parsing by building `ParsedAlerts` as a free side effect of dedup.
 
 ---
 
@@ -208,7 +208,7 @@ Both sources feed into the same deduplication pipeline, so you get the fastest p
 
 ### Custom Add-on Sources
 
-You can add custom HTTP or WebSocket sources via the UI or `config.json`. Custom sources support category mapping to translate source-specific alert types to the plugin's categories:
+You can add custom HTTP or WebSocket sources via the UI or `config.json`. Custom sources support category mapping to translate source-specific alert types to the plugin's categories — including `eventended` to signal that an alert has cleared:
 
 ```json
 {
@@ -223,7 +223,8 @@ You can add custom HTTP or WebSocket sources via the UI or `config.json`. Custom
       "category_field": "type",
       "category_mapping": {
         "ROCKET": "rockets",
-        "DRONE": "uav"
+        "DRONE": "uav",
+        "CLEAR": "eventended"
       }
     },
     {
@@ -234,15 +235,19 @@ You can add custom HTTP or WebSocket sources via the UI or `config.json`. Custom
       "message_data_field": "data",
       "category_field": "threat",
       "category_mapping": {
-        "1": "rockets",
-        "2": "uav"
+        "0": "rockets",
+        "5": "uav",
+        "2": "terror",
+        "99": "eventended"
       }
     }
   ]
 }
 ```
 
-`category_field` tells the plugin which JSON field holds the category ID in each alert object (defaults to `"cat"`). Then `category_mapping` maps each ID value from your source to a plugin alert type. For reference: Pikud HaOref uses field `cat` with values `1`=rockets, `6`=uav; Tzofar uses field `threat` with values `0`=rockets, `5`=uav.
+`category_field` tells the plugin which JSON field holds the category ID in each alert object (defaults to `"cat"`). Then `category_mapping` maps each ID value from your source to a plugin alert type. Map a value to `eventended` to signal that an alert has cleared for the listed cities — this immediately deactivates matching sensors. If no `eventended` mapping is provided, the plugin's ExpiryStage will auto-clear alerts after the configured timeout.
+
+For reference: Pikud HaOref uses field `cat` with values `1`=rockets, `6`=uav; Tzofar uses field `threat` with values `0`=rockets, `5`=uav.
 
 ### Webhooks
 
@@ -346,6 +351,7 @@ The `event` field is `"alert"` when a sensor activates and `"ended"` when it dea
 | `terror` | Terrorist Infiltration (חדירת מחבלים) |
 | `tsunami` | Tsunami (צונאמי) |
 | `hazmat` | Hazardous Materials (חומרים מסוכנים) |
+| `eventended` | Event Ended — clears active alerts for the listed cities |
 
 ---
 
