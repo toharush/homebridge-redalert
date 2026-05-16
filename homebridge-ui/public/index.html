@@ -1391,7 +1391,7 @@
       const statusBadge = entry.status === "active"
         ? `<span class="history-badge badge-active">active</span>`
         : `<span class="history-badge badge-ended">ended</span>`;
-      const clickCity = entry.city ? `onclick="flyToCity('${escapeHtml(entry.city).replace(/'/g, "\\'")}')"` : "";
+      const clickCity = entry.city ? `onclick="flyToCity('${escapeHtml(entry.city).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}')"` : "";
       return `<div class="history-row${clickCity ? " history-row-clickable" : ""}" ${clickCity}>
         <div class="history-row-top">
           <span class="history-time">${date} ${time}</span>

@@ -157,7 +157,8 @@ describe('BUG #6: Invalid webhooks should be filtered out', () => {
     await new Promise((r) => setTimeout(r, 50));
 
     assert.strictEqual(fetchCalls.length, 1, 'Only valid webhook should fire');
-    assert.ok(fetchCalls[0].includes('valid.example.com'));
+    const firedUrl = new URL(fetchCalls[0]);
+    assert.strictEqual(firedUrl.hostname, 'valid.example.com');
 
     globalThis.fetch = originalFetch;
   });
