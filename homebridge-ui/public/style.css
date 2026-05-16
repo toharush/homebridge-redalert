@@ -685,13 +685,11 @@
   border: 1px solid var(--border-primary);
   border-radius: 8px;
   padding: 12px;
-  cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s;
 }
 
 .marketplace-card:hover {
-  border-color: var(--accent-blue);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: var(--text-muted);
 }
 
 .marketplace-header {
@@ -718,6 +716,75 @@
   color: var(--text-muted);
   opacity: 0.7;
   font-family: monospace;
+}
+
+.marketplace-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-marketplace-preview,
+.btn-marketplace-add {
+  padding: 4px 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.btn-marketplace-preview:hover {
+  border-color: var(--text-muted);
+}
+
+.btn-marketplace-add {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: white;
+}
+
+.btn-marketplace-add:hover {
+  opacity: 0.9;
+}
+
+.marketplace-preview {
+  display: none;
+  margin-top: 10px;
+  padding: 8px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  font-size: 0.8em;
+  border: 1px solid var(--border-primary);
+}
+
+.marketplace-preview.show {
+  display: block;
+}
+
+.preview-loading {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.preview-status {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.preview-item {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.preview-item:last-child {
+  border-bottom: none;
+}
+
+.preview-error {
+  color: var(--accent-red);
 }
 
 /* Alert History */
