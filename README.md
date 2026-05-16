@@ -63,10 +63,10 @@
 | Dependencies | lodash | lodash + ws | +1 production dep (~200 KB) |
 | Disk I/O | None | Status + history (on change only) | Async non-blocking writes |
 | Recovery time | Up to polling interval | WebSocket: instant reconnect with backoff; HTTP: next poll cycle | Dual-source redundancy |
-| Performance | Baseline | 0.61–0.86x (faster) | Pipeline overhead is negative at ≤50 alerts |
+| Performance | Baseline | 0.64–0.90x (faster) | Pipeline overhead is negative at ≤50 alerts |
 | Test coverage | ~60 tests | 290 tests | ~5x increase |
 
-**Bottom line:** v2 is **14-39% faster** than v1 for realistic workloads (≤50 simultaneous alerts) while adding deduplication, automatic expiry, and full alert history. The pipeline eliminates redundant parsing by building `ParsedAlerts` as a free side effect of dedup.
+**Bottom line:** v2 is **10-36% faster** than v1 for realistic workloads (≤50 simultaneous alerts) while adding deduplication, automatic expiry, and full alert history. The pipeline eliminates redundant parsing by building `ParsedAlerts` as a free side effect of dedup.
 
 ---
 
