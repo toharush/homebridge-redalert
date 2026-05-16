@@ -25,21 +25,40 @@ const cities: { name: string; area: string }[] = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'src/data/cities.json'), 'utf-8'),
 );
 
-const CATEGORIES: Record<string, { threat: number; title: string; emoji: string }> = {
-  rockets:          { threat: 0, title: 'ירי רקטות וטילים', emoji: '🚀' },
-  uav:             { threat: 5, title: 'חדירת כלי טיס עוין', emoji: '✈️' },
-  terror:          { threat: 2, title: 'חדירת מחבלים', emoji: '⚠️' },
-  nonconventional: { threat: 7, title: 'איום כימי', emoji: '☣️' },
-  eventended:      { threat: 99, title: 'האירוע הסתיים', emoji: '✓' },
+const CATEGORIES: Record<string, { threat: number; orefCat: number; title: string; emoji: string }> = {
+  rockets:          { threat: 0, orefCat: 1, title: 'ירי רקטות וטילים', emoji: '🚀' },
+  uav:             { threat: 5, orefCat: 6, title: 'חדירת כלי טיס עוין', emoji: '✈️' },
+  terror:          { threat: 2, orefCat: 13, title: 'חדירת מחבלים', emoji: '⚠️' },
+  nonconventional: { threat: 7, orefCat: 2, title: 'איום כימי', emoji: '☣️' },
+  eventended:      { threat: 99, orefCat: 99, title: 'האירוע הסתיים', emoji: '✓' },
 };
 
 const wsClients = new Set<WebSocket>();
-let activeAlert: { cities: string[]; category: string; timeout: ReturnType<typeof setTimeout> } | null = null;
+type DeliveryMode = 'both' | 'http' | 'ws';
+let activeAlert: { cities: string[]; category: string; mode: DeliveryMode; timeout: ReturnType<typeof setTimeout> } | null = null;
 
 const server = http.createServer((req, res) => {
   if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(getHtml());
+    return;
+  }
+
+  if (req.method === 'GET' && req.url === '/alerts') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    if (!activeAlert || activeAlert.mode === 'ws') {
+      res.end('[]');
+      return;
+    }
+    const cat = CATEGORIES[activeAlert.category];
+    const orefAlert = [{
+      id: 'mock-' + Date.now(),
+      cat: String(cat?.orefCat ?? 1),
+      title: cat?.title ?? '',
+      data: activeAlert.cities,
+      desc: '',
+    }];
+    res.end(JSON.stringify(orefAlert));
     return;
   }
 
@@ -54,15 +73,16 @@ const server = http.createServer((req, res) => {
     req.on('data', (chunk) => (body += chunk));
     req.on('end', () => {
       try {
-        const { cities: cityNames, category, duration } = JSON.parse(body);
+        const { cities: cityNames, category, duration, mode } = JSON.parse(body);
         if (!cityNames || !cityNames.length) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'No cities provided' }));
           return;
         }
-        fireAlert(cityNames, category || 'rockets', (duration || 30) * 1000);
+        const deliveryMode: DeliveryMode = (mode === 'http' || mode === 'ws') ? mode : 'both';
+        fireAlert(cityNames, category || 'rockets', (duration || 30) * 1000, deliveryMode);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, cities: cityNames, category }));
+        res.end(JSON.stringify({ ok: true, cities: cityNames, category, mode: deliveryMode }));
       } catch {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid JSON' }));
@@ -73,7 +93,7 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'POST' && req.url === '/api/end') {
     if (activeAlert) {
-      endAlert(activeAlert.cities);
+      endAlert(activeAlert.cities, activeAlert.mode);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
     } else {
@@ -117,7 +137,7 @@ function broadcast(message: unknown) {
   }
 }
 
-function fireAlert(cityNames: string[], categoryKey: string, durationMs: number) {
+function fireAlert(cityNames: string[], categoryKey: string, durationMs: number, mode: DeliveryMode = 'both') {
   const category = CATEGORIES[categoryKey];
   if (!category) {
     console.log(`  Unknown category: ${categoryKey}`);
@@ -128,36 +148,40 @@ function fireAlert(cityNames: string[], categoryKey: string, durationMs: number)
     clearTimeout(activeAlert.timeout);
   }
 
-  const timeout = setTimeout(() => endAlert(cityNames), durationMs);
-  activeAlert = { cities: cityNames, category: categoryKey, timeout };
+  const timeout = setTimeout(() => endAlert(cityNames, mode), durationMs);
+  activeAlert = { cities: cityNames, category: categoryKey, mode, timeout };
 
-  broadcast({
-    type: 'ALERT',
-    data: {
-      threat: category.threat,
-      title: "",
+  if (mode === 'ws' || mode === 'both') {
+    broadcast([{
+      id: 'mock-ws-' + Date.now(),
+      cat: String(category.orefCat),
+      title: category.title,
       data: cityNames,
-      isDrill: false,
-    },
-  });
+      desc: '',
+    }]);
+  }
 
-  console.log(`\n  🚨 ALERT: ${category.title}`);
+  const modeLabel = mode === 'both' ? 'HTTP+WS' : mode.toUpperCase();
+  console.log(`\n  🚨 ALERT [${modeLabel}]: ${category.title}`);
   console.log(`  Cities (${cityNames.length}): ${cityNames.slice(0, 5).join(', ')}${cityNames.length > 5 ? ` +${cityNames.length - 5} more` : ''}`);
   console.log(`  Duration: ${durationMs / 1000}s\n`);
 }
 
-function endAlert(cityNames: string[]) {
+function endAlert(cityNames: string[], mode: DeliveryMode = 'both') {
   activeAlert = null;
 
-  broadcast({
-    type: 'SYSTEM_MESSAGE',
-    data: {
-      titleHe: 'עדכון פיקוד העורף',
-      bodyHe: `האירוע הסתיים באזורים: ${cityNames.join(', ')}`,
-    },
-  });
+  if (mode === 'ws' || mode === 'both') {
+    broadcast([{
+      id: 'mock-ws-end-' + Date.now(),
+      cat: '99',
+      title: 'האירוע הסתיים',
+      data: cityNames,
+      desc: '',
+    }]);
+  }
 
-  console.log(`  ✓ Event ended: ${cityNames.slice(0, 5).join(', ')}${cityNames.length > 5 ? ` +${cityNames.length - 5} more` : ''}\n`);
+  const modeLabel = mode === 'both' ? 'HTTP+WS' : mode.toUpperCase();
+  console.log(`  ✓ [${modeLabel}] Event ended: ${cityNames.slice(0, 5).join(', ')}${cityNames.length > 5 ? ` +${cityNames.length - 5} more` : ''}\n`);
 }
 
 function getHtml(): string {
@@ -278,6 +302,9 @@ function getHtml(): string {
   .status-idle { background: #1b4332; color: #95d5b2; }
   .status-active { background: #5c1a1a; color: #ff6b6b; animation: pulse 1.5s infinite; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+  .radio-group { display: flex; gap: 16px; margin-top: 6px; }
+  .radio-label { display: flex; align-items: center; gap: 4px; font-size: 14px; color: #a8b2d1; cursor: pointer; }
+  .radio-label input { accent-color: #e94560; }
   .ws-count { text-align: center; font-size: 13px; color: #666; margin-top: 8px; }
 </style>
 </head>
@@ -312,6 +339,15 @@ function getHtml(): string {
       <div>
         <label for="durationInput">Duration (sec)</label>
         <input id="durationInput" type="number" value="30" min="5" max="300">
+      </div>
+    </div>
+
+    <div style="margin-top: 12px;">
+      <label>Delivery Mode</label>
+      <div class="radio-group">
+        <label class="radio-label"><input type="radio" name="mode" value="both" checked> Both</label>
+        <label class="radio-label"><input type="radio" name="mode" value="http"> HTTP only</label>
+        <label class="radio-label"><input type="radio" name="mode" value="ws"> WS only</label>
       </div>
     </div>
   </div>
@@ -386,6 +422,7 @@ function getHtml(): string {
       cities: selected,
       category: document.getElementById('categorySelect').value,
       duration: parseInt(document.getElementById('durationInput').value) || 30,
+      mode: document.querySelector('input[name="mode"]:checked').value,
     };
     await fetch('/api/fire', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
     pollStatus();
@@ -424,10 +461,12 @@ server.listen(PORT, '0.0.0.0', () => {
 ╔═══════════════════════════════════════════════════════════════╗
 ║              Red Alert Mock Server                            ║
 ╠═══════════════════════════════════════════════════════════════╣
-║  UI:    http://${LAN_IP}:${PORT}                               ║
-║  WS:    ws://${LAN_IP}:${PORT}/socket                          ║
+║  UI:      http://${LAN_IP}:${PORT}                             ║
+║  HTTP:    http://${LAN_IP}:${PORT}/alerts                      ║
+║  WS:      ws://${LAN_IP}:${PORT}/socket                        ║
 ║                                                               ║
-║  Point a custom WebSocket source to the WS URL above.        ║
+║  Both endpoints deliver the same alert simultaneously.       ║
+║  Use both as custom sources to test deduplication.            ║
 ╚═══════════════════════════════════════════════════════════════╝
 `);
 });
