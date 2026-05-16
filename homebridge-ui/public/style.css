@@ -672,6 +672,54 @@
   border-color: var(--accent-red) !important;
 }
 
+/* Source Marketplace */
+#marketplace-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.marketplace-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.marketplace-card:hover {
+  border-color: var(--accent-blue);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.marketplace-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.marketplace-name {
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
+.marketplace-desc {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.marketplace-url {
+  font-size: 0.75em;
+  color: var(--text-muted);
+  opacity: 0.7;
+  font-family: monospace;
+}
+
 /* Alert History */
 .history-panel {
   max-height: 0;

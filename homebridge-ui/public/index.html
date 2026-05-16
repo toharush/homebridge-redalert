@@ -163,6 +163,28 @@
   <div id="addon-sources-container"></div>
   <button class="btn-add" onclick="addAddonSource()">+ Add Source</button>
 
+  <!-- Source Marketplace -->
+  <div class="section-title" style="margin-top: 24px">Source Marketplace</div>
+  <p style="font-size: 0.85em; color: var(--text-muted); margin: 0 0 12px">Click to add a pre-configured source. These are third-party mirrors &mdash; no geo-restriction, no authentication.</p>
+  <div id="marketplace-container">
+    <div class="marketplace-card" onclick="addMarketplaceSource('mako')">
+      <div class="marketplace-header">
+        <span class="marketplace-name">Mako</span>
+        <span class="source-badge">HTTP</span>
+      </div>
+      <div class="marketplace-desc">Mako/N12 news mirror of Pikud HaOref. Identical format to official API. No geo-restriction.</div>
+      <div class="marketplace-url">mako.co.il</div>
+    </div>
+    <div class="marketplace-card" onclick="addMarketplaceSource('prog')">
+      <div class="marketplace-header">
+        <span class="marketplace-name">Prog.co.il</span>
+        <span class="source-badge">HTTP</span>
+      </div>
+      <div class="marketplace-desc">Independent alert mirror with per-city items and TTL. Includes English category names.</div>
+      <div class="marketplace-url">prog.co.il</div>
+    </div>
+  </div>
+
   <!-- Map -->
   <div class="section-title" style="margin-top: 24px">Coverage Map</div>
   <div id="city-map"></div>
@@ -438,6 +460,9 @@
     const card = document.createElement("div");
     card.className = "source-card addon";
     card.id = `addon-source-${id}`;
+    if (source.response_format) {
+      card.dataset.responseFormat = JSON.stringify(source.response_format);
+    }
 
     const displayName = source.name || "Custom Source";
     const typeLabel = source.type === "websocket" ? "WebSocket" : "HTTP";
@@ -445,7 +470,7 @@
 
     card.innerHTML = `
       <div class="source-header" onclick="toggleAddonSource(${id}, event)">
-        <h6><span class="source-chevron">&#9654;</span>${escapeHtml(displayName)} <span class="source-badge">Add-on</span></h6>
+        <h6><span class="source-chevron">&#9654;</span>${escapeHtml(displayName)} <span class="source-badge">Add-on</span><span class="source-status-dot" id="status-addon-${id}" title="Unknown"></span></h6>
         <button class="btn-remove" onclick="removeAddonSource(${id})">Remove</button>
       </div>
       <div class="source-info">${typeLabel} &bull; ${escapeHtml(urlHost)}</div>
@@ -553,6 +578,39 @@
     syncConfig();
   }
 
+  const MARKETPLACE_SOURCES = {
+    mako: {
+      name: "Mako",
+      type: "http",
+      url: "https://www.mako.co.il/Collab/amudanan/alerts.json",
+      category_field: "cat",
+      category_mapping: { "1": "rockets", "6": "uav", "2": "nonconventional", "3": "earthquake", "13": "terror", "10": "warning" },
+    },
+    prog: {
+      name: "Prog.co.il",
+      type: "http",
+      url: "https://www.prog.co.il/pakar.json",
+      headers: { "Referer": "https://www.prog.co.il/", "X-Requested-With": "XMLHttpRequest" },
+      response_format: { alerts_path: "items", category_field: "category", cities_field: "header", title_field: "title" },
+      category_mapping: { "MissileAlert": "rockets", "UAVAlert": "uav", "EarthquakeAlert": "earthquake", "TerrorAlert": "terror", "NonConventionalAlert": "nonconventional" },
+    },
+  };
+
+  function addMarketplaceSource(key) {
+    const template = MARKETPLACE_SOURCES[key];
+    if (!template) return;
+    const existing = document.querySelectorAll(".source-card.addon .addon-name");
+    for (const input of existing) {
+      if (input.value === template.name) {
+        homebridge.toast.warning(`"${template.name}" is already added.`);
+        return;
+      }
+    }
+    renderAddonSource({ ...template });
+    syncConfig();
+    homebridge.toast.success(`Added "${template.name}" source.`);
+  }
+
   function removeAddonSource(id) {
     document.getElementById(`addon-source-${id}`).remove();
     syncConfig();
@@ -649,6 +707,10 @@
           .value.trim();
         if (msgType) source.message_type = msgType;
         if (msgDataField) source.message_data_field = msgDataField;
+      }
+
+      if (card.dataset.responseFormat) {
+        try { source.response_format = JSON.parse(card.dataset.responseFormat); } catch {}
       }
 
       sources.push(source);
@@ -1239,12 +1301,29 @@
           setStatusDot("status-pikud-haoref", src.healthy ? "healthy" : "unhealthy");
         } else if (src.name === "Tzofar") {
           setStatusDot("status-tzofar", src.healthy ? "healthy" : "unhealthy");
+        } else {
+          const addonIdx = findAddonIndexByName(src.name);
+          if (addonIdx !== -1) {
+            setStatusDot(`status-addon-${addonIdx}`, src.healthy ? "healthy" : "unhealthy");
+          }
         }
       }
     } catch {
       setStatusDot("status-pikud-haoref", "unknown");
       setStatusDot("status-tzofar", "unknown");
     }
+  }
+
+  function findAddonIndexByName(name) {
+    const cards = document.querySelectorAll(".source-card.addon");
+    for (const card of cards) {
+      const nameInput = card.querySelector(".addon-name");
+      if (nameInput && nameInput.value === name) {
+        const idMatch = card.id.match(/addon-source-(\d+)/);
+        if (idMatch) return parseInt(idMatch[1]);
+      }
+    }
+    return -1;
   }
 
   function setStatusDot(elId, state) {
