@@ -74,22 +74,28 @@ function parseSystemMessage(data: any): OrefRealtimeAlert[] {
 
   if (isEarlyWarning(data.titleHe, body)) {
     const cities = extractCitiesFromBody(body);
+    if (cities.length === 0) {
+      return [];
+    }
     return [{
       id: `tzofar-ew-${crypto.randomUUID()}`,
       cat: String(OrefCategory.Warning),
       title: data.titleHe || 'Early Warning',
-      data: cities.length > 0 ? cities : ['רחבי הארץ'],
+      data: cities,
       desc: body,
     }];
   }
 
   if (isExitNotification(data.titleHe, body)) {
     const cities = extractCitiesFromBody(body);
+    if (cities.length === 0) {
+      return [];
+    }
     return [{
       id: `tzofar-exit-${crypto.randomUUID()}`,
       cat: String(OrefCategory.EventEnded),
       title: data.titleHe || 'Event Ended',
-      data: cities.length > 0 ? cities : ['רחבי הארץ'],
+      data: cities,
       desc: body,
     }];
   }

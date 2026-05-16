@@ -88,7 +88,7 @@ describe('parseTzofarMessage', () => {
       assert.deepStrictEqual(result[0].data, ['עוטף עזה', 'שפלה']);
     });
 
-    it('falls back to nationwide when no cities in body', () => {
+    it('ignores early warning when no cities in body', () => {
       const result = parseTzofarMessage({
         type: 'SYSTEM_MESSAGE',
         data: {
@@ -96,8 +96,7 @@ describe('parseTzofarMessage', () => {
           bodyHe: 'בדקות הקרובות צפויות להתקבל התרעות',
         },
       });
-      assert.strictEqual(result.length, 1);
-      assert.deepStrictEqual(result[0].data, ['רחבי הארץ']);
+      assert.strictEqual(result.length, 0);
     });
 
     it('ignores non-matching title', () => {
@@ -134,8 +133,7 @@ describe('parseTzofarMessage', () => {
           bodyHe: 'האירוע הסתיים',
         },
       });
-      assert.strictEqual(result.length, 1);
-      assert.deepStrictEqual(result[0].data, ['רחבי הארץ']);
+      assert.strictEqual(result.length, 0, 'should ignore exit notification without specific cities');
     });
   });
 });
