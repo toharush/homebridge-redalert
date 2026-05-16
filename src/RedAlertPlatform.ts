@@ -199,7 +199,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
           headers: src.headers,
           pollingInterval: src.polling_interval ?? pollingInterval,
           requestTimeout: src.request_timeout ?? requestTimeout,
-          failureThreshold: src.failure_threshold ?? healthCheckThreshold,
+          failureThreshold: src.failure_threshold ?? 1,
           categoryMapping: mapping,
           responseFormat,
         };
@@ -211,7 +211,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
           headers: src.headers,
           reconnectInterval: src.reconnect_interval ?? ws.reconnectInterval,
           maxReconnectInterval: src.max_reconnect_interval ?? ws.maxReconnectInterval,
-          failureThreshold: src.failure_threshold ?? healthCheckThreshold,
+          failureThreshold: src.failure_threshold ?? 1,
           categoryMapping: mapping,
           responseFormat,
           pingInterval: src.ping_interval ?? ws.pingInterval,
