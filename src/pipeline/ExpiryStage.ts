@@ -10,7 +10,7 @@ export class ExpiryStage implements PipelineStage {
 
   constructor(maxAgeMs: number) {
     this.maxAgeMs = maxAgeMs;
-    this.scanIntervalMs = maxAgeMs >>> 2;
+    this.scanIntervalMs = Math.min(maxAgeMs >>> 2, 30000);
   }
 
   attachSeen(seen: Map<string, Map<string, number>>): void {
