@@ -20,6 +20,7 @@ export class AlertPipeline {
 
   private healthCallback: ((status: SourceStatus[]) => void) | null = null;
   private lastHealthy = true;
+  private lastHealthSnapshot = '';
 
   constructor(private readonly log: DebugLogger) {
     this.dedupStage = new DeduplicationStage();
@@ -114,10 +115,14 @@ export class AlertPipeline {
 
   private evaluateHealth(): void {
     const status = this.getSourceStatus();
+    const snapshot = status.map((s) => s.healthy ? '1' : '0').join('');
+    if (snapshot !== this.lastHealthSnapshot) {
+      this.lastHealthSnapshot = snapshot;
+      this.healthCallback?.(status);
+    }
     const healthy = status.some((s) => s.healthy);
     if (healthy !== this.lastHealthy) {
       this.lastHealthy = healthy;
-      this.healthCallback?.(status);
       if (healthy) {
         this.log.info('At least one source recovered — system healthy');
       } else {

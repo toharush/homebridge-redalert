@@ -46,6 +46,7 @@
 - **Prefix matching** — Match sub-areas automatically (e.g. "תל אביב" matches "תל אביב - יפו").
 - **Webhooks** — Fire HTTP POST/PUT to any URL when a sensor activates or deactivates. Payload includes sensor name, city, title, and timestamp. Configure multiple endpoints with a 10-second timeout per request.
 - **Health check accessory** — Optional HomeKit switch that turns OFF when all sources are unreachable.
+- **Source marketplace** — One-click add pre-configured third-party alert sources (Mako, Prog.co.il) from the config UI.
 - **Automatic config migration** — v1.x comma-separated city strings and `custom_cities` fields are auto-migrated atomically on first launch.
 
 ---
