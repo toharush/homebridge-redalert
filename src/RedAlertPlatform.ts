@@ -3,14 +3,22 @@ import {
   PLATFORM_NAME, PLUGIN_NAME, DEFAULT_POLLING_INTERVAL,
   DEFAULT_ALERT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, DEFAULT_TURNOFF_DELAY,
   DEFAULT_HEALTH_CHECK_THRESHOLD,
+  TZOFAR_WS_URL, tzofarHeaders,
 } from './settings';
 import _ from 'lodash';
 import { CATEGORY_MAP, ALL_CATEGORY_KEYS, SensorConfig } from './types';
 import { validateConfig } from './utils/configValidator';
 import { createDebugLogger, DebugLogger } from './utils/debugLogger';
-import { AlertService } from './services/AlertService';
+import { AlertPipeline, ExpiryStage, DeduplicationStage, AlertHistory } from './pipeline';
+import * as path from 'path';
 import { SensorFilter } from './services/SensorFilter';
+import { WebhookService, WebhookConfig } from './services/WebhookService';
+import { HealthStatusService } from './services/HealthStatusService';
 import { OrefClient } from './clients/orefClient';
+import { HttpSource, HttpSourceConfig } from './clients/httpSource';
+import { WebSocketSource, WebSocketSourceConfig } from './clients/webSocketSource';
+import { CategoryMapping, DEFAULT_RESPONSE_FORMAT } from './clients/categoryMapper';
+import { parseTzofarMessage, loadTzofarCityMap } from './clients/tzofarParser';
 import { MotionSensorAccessory } from './accessories/MotionSensorAccessory';
 import { HealthCheckAccessory } from './accessories/HealthCheckAccessory';
 import { migrateConfig } from './utils/migrationHelper';
@@ -22,7 +30,9 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
 
   private readonly cachedAccessories: Map<string, PlatformAccessory> = new Map();
   private readonly sensorAccessories: MotionSensorAccessory[] = [];
-  private alertService: AlertService | null = null;
+  private pipeline: AlertPipeline | null = null;
+  private history: AlertHistory | null = null;
+  private readonly historyFilePath: string;
 
   constructor(
     logger: Logger,
@@ -32,6 +42,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
     this.log = createDebugLogger(logger, _.get(config, 'debug', false));
+    this.historyFilePath = path.join(api.user.storagePath(), 'redalert-history.json');
 
     migrateConfig(api.user.configPath(), this.log);
 
@@ -42,25 +53,34 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
 
     const pollingInterval = _.get(config, 'polling_interval', DEFAULT_POLLING_INTERVAL);
     const requestTimeout = _.get(config, 'request_timeout', DEFAULT_REQUEST_TIMEOUT);
-    const globalAlertTimeout = _.get(config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT);
     const turnoffDelay = _.get(config, 'turnoff_delay', DEFAULT_TURNOFF_DELAY);
     const healthCheckThreshold = _.get(config, 'health_check_threshold', DEFAULT_HEALTH_CHECK_THRESHOLD);
-    this.alertService = new AlertService(
-      this.log, new OrefClient(requestTimeout, this.log), pollingInterval, healthCheckThreshold,
+    const reconnectInterval = _.get(config, 'reconnect_interval', 10000);
+    const maxReconnectInterval = _.get(config, 'max_reconnect_interval', 60000);
+    const pingInterval = _.get(config, 'ping_interval', 60000);
+    const pongTimeout = _.get(config, 'pong_timeout', 420000);
+    const customSources: any[] = _.get(config, 'custom_sources', []);
+    const webhookConfigs: WebhookConfig[] = _.get(config, 'webhooks', []);
+    const webhook = webhookConfigs.length > 0 ? new WebhookService(webhookConfigs, this.log) : null;
+
+    this.pipeline = this.buildPipeline(
+      pollingInterval, requestTimeout, healthCheckThreshold, customSources,
+      { reconnectInterval, maxReconnectInterval, pingInterval, pongTimeout },
     );
 
     this.log.easyDebug(`Finished initializing platform: ${PLATFORM_NAME}`);
 
     this.api.on('didFinishLaunching', () => {
       this.log.easyDebug('Executed didFinishLaunching callback');
-      this.discoverDevices(this.alertService!, validated.sensors, globalAlertTimeout, turnoffDelay);
+      loadTzofarCityMap().catch(() => {});
+      this.discoverDevices(this.pipeline!, validated.sensors, turnoffDelay, webhook);
     });
 
     this.api.on('shutdown', () => this.shutdown());
   }
 
   shutdown() {
-    this.alertService?.stop();
+    this.pipeline?.stop();
     for (const accessory of this.sensorAccessories) {
       accessory.destroy();
     }
@@ -71,7 +91,12 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     this.cachedAccessories.set(accessory.UUID, accessory);
   }
 
-  private discoverDevices(alertService: AlertService, sensors: SensorConfig[], globalAlertTimeout: number, turnoffDelay: number) {
+  private discoverDevices(
+    pipeline: AlertPipeline,
+    sensors: SensorConfig[],
+    turnoffDelay: number,
+    webhook: WebhookService | null,
+  ) {
     const activeUUIDs = new Set<string>();
 
     for (const sensor of sensors) {
@@ -90,26 +115,119 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       this.sensorAccessories.push(sensorAccessory);
       const filter = new SensorFilter(
         sensor.name, this.log, sensorAccessory, cities,
-        allowedCategories, globalAlertTimeout, prefixMatching,
+        allowedCategories, prefixMatching, webhook ?? undefined,
       );
-      alertService.registerListener(filter);
+      pipeline.subscribe(filter);
 
       this.log.info(
         `[${sensor.name}] Monitoring ${cities.length} cities, ${allowedCategories.size} category IDs, prefix=${prefixMatching}`,
       );
     }
 
+    const statusService = new HealthStatusService(
+      path.join(this.api.user.storagePath(), 'redalert-status.json'),
+    );
+
     if (_.get(this.config, 'health_check', false)) {
       const healthAccessory = this.resolveAccessory('Red Alert Health');
       activeUUIDs.add(healthAccessory.UUID);
       const healthCheck = new HealthCheckAccessory(this.log, this, healthAccessory);
-      alertService.onHealthChange = (healthy) => healthCheck.updateHealth(healthy);
+      pipeline.onHealthChange = (status) => {
+        healthCheck.updateHealth(status);
+        statusService.update(status);
+      };
       this.log.info('Health check sensor enabled');
+    } else {
+      pipeline.onHealthChange = (status) => statusService.update(status);
     }
 
     this.removeStaleAccessories(activeUUIDs);
-    alertService.start();
+    pipeline.start();
+    statusService.update(pipeline.getSourceStatus());
     this.log.info('Red Alert is running. You may close the config window.');
+  }
+
+  private buildPipeline(
+    pollingInterval: number,
+    requestTimeout: number,
+    healthCheckThreshold: number,
+    customSources: any[],
+    ws: { reconnectInterval: number; maxReconnectInterval: number; pingInterval: number; pongTimeout: number },
+  ): AlertPipeline {
+    const pipeline = new AlertPipeline(this.log);
+    this.history = new AlertHistory(1000, this.historyFilePath);
+
+    pipeline.addStage(new DeduplicationStage(30000, undefined, this.history));
+    pipeline.addStage(new ExpiryStage(_.get(this.config, 'alert_timeout', DEFAULT_ALERT_TIMEOUT)));
+    pipeline.subscribe(this.history);
+
+    const orefClient = new OrefClient(requestTimeout);
+    pipeline.addSource(new HttpSource(this.log, {
+      name: 'Pikud HaOref',
+      url: '',
+      pollingInterval,
+      requestTimeout,
+      failureThreshold: healthCheckThreshold,
+      fetchFn: () => orefClient.fetchAlerts(),
+      adaptiveTimeout: true,
+    }));
+
+    pipeline.addSource(new WebSocketSource(this.log, {
+      name: 'Tzofar',
+      url: TZOFAR_WS_URL,
+      headers: tzofarHeaders(),
+      reconnectInterval: ws.reconnectInterval,
+      maxReconnectInterval: ws.maxReconnectInterval,
+      failureThreshold: healthCheckThreshold,
+      pingInterval: ws.pingInterval,
+      pongTimeout: ws.pongTimeout,
+      parseFn: parseTzofarMessage,
+    }));
+
+    for (const src of customSources) {
+      if (!src.url) {
+        continue;
+      }
+      const mapping: CategoryMapping = src.category_mapping ?? {};
+      const responseFormat = src.response_format ?? (src.category_field
+        ? { ...DEFAULT_RESPONSE_FORMAT, category_field: src.category_field }
+        : undefined);
+      if (src.type === 'http') {
+        const config: HttpSourceConfig = {
+          name: src.name ?? 'custom-http',
+          url: src.url,
+          headers: src.headers,
+          pollingInterval: src.polling_interval ?? pollingInterval,
+          requestTimeout: src.request_timeout ?? requestTimeout,
+          failureThreshold: src.failure_threshold ?? 1,
+          categoryMapping: mapping,
+          responseFormat,
+        };
+        pipeline.addSource(new HttpSource(this.log, config));
+      } else if (src.type === 'websocket') {
+        const config: WebSocketSourceConfig = {
+          name: src.name ?? 'custom-ws',
+          url: src.url,
+          headers: src.headers,
+          reconnectInterval: src.reconnect_interval ?? ws.reconnectInterval,
+          maxReconnectInterval: src.max_reconnect_interval ?? ws.maxReconnectInterval,
+          failureThreshold: src.failure_threshold ?? 1,
+          categoryMapping: mapping,
+          responseFormat,
+          pingInterval: src.ping_interval ?? ws.pingInterval,
+          pongTimeout: src.pong_timeout ?? ws.pongTimeout,
+          messageType: src.message_type,
+          messageDataField: src.message_data_field,
+        };
+        pipeline.addSource(new WebSocketSource(this.log, config));
+      } else {
+        this.log.warn(`Unknown source type "${src.type}" for "${src.name}", skipping`);
+      }
+    }
+
+    const customCount = pipeline.getSourceStatus().length - 2;
+    this.log.info(`Alert sources: 2 built-in + ${customCount} add-on(s) = ${2 + customCount} total`);
+    return pipeline;
   }
 
   private parseCities(sensor: SensorConfig): string[] {

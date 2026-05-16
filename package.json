@@ -31,6 +31,8 @@
     "build": "rimraf ./dist && tsc && npm run copy-data",
     "copy-data": "mkdir -p dist/data && cp src/data/cities.json dist/data/",
     "test": "tsx --test src/**/*.spec.ts",
+    "mock": "tsx mock-server.ts",
+    "test:connectivity": "tsx --test src/clients/connectivity.test.ts",
     "prepublishOnly": "npm run lint && npm run build",
     "first-publish": "npm publish --access public"
   },
@@ -55,10 +57,12 @@
   ],
   "dependencies": {
     "@homebridge/plugin-ui-utils": "^1.0.0",
-    "lodash": "^4.18.1"
+    "lodash": "^4.18.1",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/lodash": "^4.17.24",
+    "@types/ws": "^8.18.0",
     "@types/node": "^25.5.0",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",

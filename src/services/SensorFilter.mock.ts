@@ -1,9 +1,10 @@
 import { mock } from 'node:test';
 import { CATEGORY_MAP, OrefRealtimeAlert, AlertState } from '../types';
 import { OrefClient } from '../clients/orefClient';
-import { AlertService } from './AlertService';
 import { SensorFilter, AlertAccessory, parseAlerts } from './SensorFilter';
-import { DEFAULT_ALERT_TIMEOUT, DEFAULT_HEALTH_CHECK_THRESHOLD } from '../settings';
+import { AlertPipeline, DeduplicationStage } from '../pipeline';
+import { HttpSource } from '../clients/httpSource';
+import { DEFAULT_HEALTH_CHECK_THRESHOLD } from '../settings';
 
 // Re-export everything from orefClient.mock so consumers go through this layer
 export {
@@ -104,7 +105,7 @@ export class TestPipeline {
   addSensor(
     cities: string[],
     categories: Set<number>,
-    opts?: { timeout?: number; prefix?: boolean; name?: string },
+    opts?: { prefix?: boolean; name?: string },
   ): SensorHandle {
     const sensor = createMockAccessory();
     const filter = new SensorFilter(
@@ -113,7 +114,6 @@ export class TestPipeline {
       sensor,
       cities,
       categories,
-      opts?.timeout ?? DEFAULT_ALERT_TIMEOUT,
       opts?.prefix ?? false,
     );
     this._filters.push(filter);
@@ -139,14 +139,23 @@ export class TestPipeline {
     }
   }
 
-  /** Real AlertService polling through OrefClient */
+  /** Real pipeline polling through HttpSource + OrefClient */
   async runService(opts?: { pollInterval?: number; waitMs?: number }): Promise<void> {
-    const service = new AlertService(this.log, this.client, opts?.pollInterval ?? 10, DEFAULT_HEALTH_CHECK_THRESHOLD);
+    const pipeline = new AlertPipeline(this.log);
+    pipeline.addStage(new DeduplicationStage());
+    pipeline.addSource(new HttpSource(this.log, {
+      name: 'test-oref',
+      url: '',
+      pollingInterval: opts?.pollInterval ?? 10,
+      requestTimeout: 3000,
+      failureThreshold: DEFAULT_HEALTH_CHECK_THRESHOLD,
+      fetchFn: () => this.client.fetchAlerts(),
+    }));
     for (const f of this._filters) {
-      service.registerListener(f);
+      pipeline.subscribe(f);
     }
-    service.start();
+    pipeline.start();
     await new Promise((r) => setTimeout(r, opts?.waitMs ?? 200));
-    service.stop();
+    pipeline.stop();
   }
 }

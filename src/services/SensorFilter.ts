@@ -1,5 +1,7 @@
 import { OrefRealtimeAlert, AlertState, OrefCategory } from '../types';
 import { DebugLogger } from '../utils/debugLogger';
+import { NATIONWIDE_CITY } from '../settings';
+import { WebhookService } from './WebhookService';
 
 export interface CityAlert {
   categoryId: number;
@@ -23,21 +25,25 @@ export function parseAlerts(alerts: OrefRealtimeAlert[]): ParsedAlerts {
   const endedCities = new Set<string>();
   const relevantCities = new Map<string, CityAlert[]>();
 
-  for (const alert of alerts) {
+  for (let i = 0; i < alerts.length; i++) {
+    const alert = alerts[i];
     const categoryId = Number(alert.cat) | 0;
     if (categoryId === OrefCategory.EventEnded) {
-      for (const city of alert.data) {
-        if (city) {
-          endedCities.add(city);
+      const data = alert.data;
+      for (let j = 0; j < data.length; j++) {
+        if (data[j]) {
+          endedCities.add(data[j]);
         }
       }
     } else if (categoryId > 0) {
       const entry: CityAlert = { categoryId, title: alert.title };
-      for (const city of alert.data) {
+      const data = alert.data;
+      for (let j = 0; j < data.length; j++) {
+        const city = data[j];
         if (city) {
-          const existing = relevantCities.get(city);
-          if (existing) {
-            existing.push(entry);
+          const arr = relevantCities.get(city);
+          if (arr) {
+            arr.push(entry);
           } else {
             relevantCities.set(city, [entry]);
           }
@@ -52,7 +58,7 @@ export function parseAlerts(alerts: OrefRealtimeAlert[]): ParsedAlerts {
 export class SensorFilter implements AlertListener {
   private readonly citySet: Set<string>;
   private readonly activeCities = new Map<string, number>();
-  private readonly maxActiveAgeMs: number;
+  private readonly webhook: WebhookService | null;
 
   constructor(
     private readonly name: string,
@@ -60,33 +66,45 @@ export class SensorFilter implements AlertListener {
     private readonly accessory: AlertAccessory,
     cities: string[],
     private readonly allowedCategories: Set<number>,
-    alertTimeoutMs: number,
     private readonly prefixMatching: boolean = false,
+    webhook?: WebhookService,
   ) {
     this.citySet = new Set(cities);
-    this.maxActiveAgeMs = alertTimeoutMs;
+    this.webhook = webhook ?? null;
   }
 
   handleAlerts(parsed: ParsedAlerts): void {
     const { endedCities, relevantCities } = parsed;
 
+    const nationwideEnd = endedCities.has(NATIONWIDE_CITY);
+    const nationwideAlert = this.findNationwideAlert(relevantCities);
+
     for (const configured of this.citySet) {
-      if (this.findMatchInSet(configured, endedCities) && this.activeCities.delete(configured)) {
+      if ((nationwideEnd || this.findMatchInSet(configured, endedCities)) && this.activeCities.delete(configured)) {
         this.log.info(`[${this.name}] Event ended: ${configured}`);
+        this.webhook?.fire({
+          event: 'ended', sensor: this.name, city: configured, title: 'Event Ended', timestamp: Date.now(),
+        });
       }
 
-      const title = this.findMatchingAlert(configured, relevantCities);
+      const title = nationwideAlert ?? this.findMatchingAlert(configured, relevantCities);
       if (title) {
         const isNew = !this.activeCities.has(configured);
         this.activeCities.set(configured, Date.now());
         if (isNew) {
           this.log.info(`[${this.name}] ALERT: ${title} - ${configured}`);
+          this.webhook?.fire({
+            event: 'alert', sensor: this.name, city: configured, title, timestamp: Date.now(),
+          });
         }
       }
     }
 
-    this.expireStaleAlerts();
     this.broadcastState();
+  }
+
+  private findNationwideAlert(relevantCities: Map<string, CityAlert[]>): string | undefined {
+    return this.tryMatchCategory(relevantCities.get(NATIONWIDE_CITY));
   }
 
   private findMatchInSet(configured: string, alertCities: Set<string>): boolean {
@@ -129,20 +147,10 @@ export class SensorFilter implements AlertListener {
     }
     for (const { categoryId, title } of entries) {
       if (this.allowedCategories.has(categoryId)) {
-        return title;
+        return title || 'Alert';
       }
     }
     return undefined;
-  }
-
-  private expireStaleAlerts(): void {
-    const now = Date.now();
-    for (const [city, timestamp] of this.activeCities) {
-      if (now - timestamp > this.maxActiveAgeMs) {
-        this.activeCities.delete(city);
-        this.log.warn(`[${this.name}] Alert for ${city} expired after ${this.maxActiveAgeMs / 1000}s (safety fallback)`);
-      }
-    }
   }
 
   private broadcastState(): void {

@@ -82,7 +82,7 @@ describe('HealthCheckAccessory', () => {
     const { accessory, getSwitchValue } = createMockPlatformAccessory();
     const health = new HealthCheckAccessory(log, createMockHomekit(), accessory);
 
-    health.updateHealth(false);
+    health.updateHealth([{ name: 'test', type: 'http', healthy: false }]);
 
     assert.strictEqual(getSwitchValue(), false);
   });
@@ -91,10 +91,10 @@ describe('HealthCheckAccessory', () => {
     const { accessory, getSwitchValue } = createMockPlatformAccessory();
     const health = new HealthCheckAccessory(log, createMockHomekit(), accessory);
 
-    health.updateHealth(false);
+    health.updateHealth([{ name: 'test', type: 'http', healthy: false }]);
     assert.strictEqual(getSwitchValue(), false);
 
-    health.updateHealth(true);
+    health.updateHealth([{ name: 'test', type: 'http', healthy: true }]);
     assert.strictEqual(getSwitchValue(), true);
   });
 
@@ -102,7 +102,7 @@ describe('HealthCheckAccessory', () => {
     const { accessory } = createMockPlatformAccessory();
     const health = new HealthCheckAccessory(log, createMockHomekit(), accessory);
 
-    health.updateHealth(false);
+    health.updateHealth([{ name: 'test', type: 'http', healthy: false }]);
 
     assert.strictEqual(log.warn.mock.calls.length, 1);
     assert.ok(log.warn.mock.calls[0].arguments[0].includes('UNREACHABLE'));
@@ -112,7 +112,7 @@ describe('HealthCheckAccessory', () => {
     const { accessory } = createMockPlatformAccessory();
     const health = new HealthCheckAccessory(log, createMockHomekit(), accessory);
 
-    health.updateHealth(true);
+    health.updateHealth([{ name: 'test', type: 'http', healthy: true }]);
 
     assert.strictEqual(log.info.mock.calls.length, 1);
     assert.ok(log.info.mock.calls[0].arguments[0].includes('reachable'));

@@ -70,16 +70,14 @@ describe('OrefClient', () => {
     assert.strictEqual(result[0].id, rocketMissilePayload.id);
   });
 
-  it('should return empty array for malformed JSON', async () => {
+  it('should throw on malformed JSON', async () => {
     globalThis.fetch = mockFetch('not valid json{{{') as any;
-    const result = await client.fetchAlerts();
-    assert.deepStrictEqual(result, []);
+    await assert.rejects(() => client.fetchAlerts());
   });
 
-  it('should return empty array for non-ok HTTP status', async () => {
+  it('should throw on non-ok HTTP status', async () => {
     globalThis.fetch = mockFetch('<html>Server Error</html>', 500) as any;
-    const result = await client.fetchAlerts();
-    assert.deepStrictEqual(result, []);
+    await assert.rejects(() => client.fetchAlerts(), (err: Error) => err.message.includes('500'));
   });
 
   it('should return empty array for BOM-only response', async () => {
