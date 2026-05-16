@@ -46,7 +46,7 @@
 - **Prefix matching** — Match sub-areas automatically (e.g. "תל אביב" matches "תל אביב - יפו").
 - **Webhooks** — Fire HTTP POST/PUT to any URL when a sensor activates or deactivates. Payload includes sensor name, city, title, and timestamp. Configure multiple endpoints with a 10-second timeout per request.
 - **Health check accessory** — Optional HomeKit switch that turns OFF when all sources are unreachable.
-- **Source marketplace** — One-click add pre-configured third-party alert sources (Mako, Prog.co.il) from the config UI.
+- **Source marketplace (Beta)** — One-click add pre-configured third-party alert sources (Mako, Prog.co.il) from the config UI. These sources are experimental and not recommended for production use.
 - **Automatic config migration** — v1.x comma-separated city strings and `custom_cities` fields are auto-migrated atomically on first launch.
 
 ---
@@ -74,7 +74,7 @@
 
 1. The plugin creates one **motion sensor** per configured sensor in HomeKit.
 2. An **alert pipeline** ingests alerts from multiple sources simultaneously — **Pikud HaOref** (HTTP polling every 1s) and **Tzofar** (WebSocket push, ~50ms delivery) are built-in. Custom HTTP/WebSocket sources can be added.
-3. On each poll, alerts first pass through an **ExpiryStage** — it reads the dedup's active city timestamps and injects synthetic "Event Ended" alerts for cities that haven't been refreshed within the configured timeout (default: 30 min). This scan runs infrequently (every ~7.5 min) with zero per-poll cost.
+3. On each poll, alerts first pass through an **ExpiryStage** — it reads the dedup's active city timestamps and injects synthetic "Event Ended" alerts for cities that haven't been refreshed within the configured timeout (default: 30 min). This scan runs every ~30 seconds with zero per-poll cost.
 4. Alerts (including any synthetic event-ended) then pass through a **DeduplicationStage** — a per-category city-level check (30s sliding window) ensures cross-source duplicates only fire once. The stage simultaneously builds a `ParsedAlerts` structure for downstream consumers (zero extra parsing).
 5. Each sensor independently filters deduplicated alerts by its configured cities, categories, and optional prefix matching.
 6. When an alert matches, the sensor turns **ON** and webhooks fire. Nationwide alerts (`רחבי הארץ`) activate all configured cities.
