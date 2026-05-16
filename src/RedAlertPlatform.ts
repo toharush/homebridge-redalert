@@ -18,7 +18,7 @@ import { OrefClient } from './clients/orefClient';
 import { HttpSource, HttpSourceConfig } from './clients/httpSource';
 import { WebSocketSource, WebSocketSourceConfig } from './clients/webSocketSource';
 import { CategoryMapping, DEFAULT_RESPONSE_FORMAT } from './clients/categoryMapper';
-import { parseTzofarMessage } from './clients/tzofarParser';
+import { parseTzofarMessage, loadTzofarCityMap } from './clients/tzofarParser';
 import { MotionSensorAccessory } from './accessories/MotionSensorAccessory';
 import { HealthCheckAccessory } from './accessories/HealthCheckAccessory';
 import { migrateConfig } from './utils/migrationHelper';
@@ -72,6 +72,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
 
     this.api.on('didFinishLaunching', () => {
       this.log.easyDebug('Executed didFinishLaunching callback');
+      loadTzofarCityMap().catch(() => {});
       this.discoverDevices(this.pipeline!, validated.sensors, turnoffDelay, webhook);
     });
 

@@ -31,6 +31,7 @@
 ## What's New in v2
 
 - **Multi-source alert pipeline** — Alerts stream from Pikud HaOref (HTTP) and Tzofar (WebSocket) simultaneously. Custom HTTP/WebSocket sources can be added via the UI.
+- **Tzofar early warning & event-ended** — Full SYSTEM_MESSAGE support: early warnings (`instructionType=0`) and event-ended (`instructionType=1`) are parsed with city ID resolution from Tzofar's city database (fetched on startup).
 - **Sliding-window deduplication** — Identical alerts from different sources are merged using a 30-second sliding window so sensors only fire once, with no boundary edge cases.
 - **Automatic expiry** — Cities auto-clear after the configured timeout (default 30 min) if no "Event Ended" is received. Zero per-poll overhead — scans only when needed.
 - **Coverage map** — Interactive Leaflet map in the config UI shows all monitored cities with per-sensor color-coded markers.
@@ -62,7 +63,7 @@
 | Disk I/O | None | Status + history (on change only) | Async non-blocking writes |
 | Recovery time | Up to polling interval | WebSocket: instant reconnect with backoff; HTTP: next poll cycle | Dual-source redundancy |
 | Performance | Baseline | 0.61–0.86x (faster) | Pipeline overhead is negative at ≤50 alerts |
-| Test coverage | ~60 tests | 251 tests | 4x increase |
+| Test coverage | ~60 tests | 290 tests | ~5x increase |
 
 **Bottom line:** v2 is **14-39% faster** than v1 for realistic workloads (≤50 simultaneous alerts) while adding deduplication, automatic expiry, and full alert history. The pipeline eliminates redundant parsing by building `ParsedAlerts` as a free side effect of dedup.
 
@@ -202,7 +203,7 @@ The plugin ships with two alert sources that run simultaneously:
 | Source | Type | Description |
 |--------|------|-------------|
 | **Pikud HaOref** | HTTP polling | Official Home Front Command API, polled every second (configurable) with adaptive timeout |
-| **Tzofar** | WebSocket | Real-time push alerts from tzevaadom.co.il with automatic reconnection and keep-alive |
+| **Tzofar** | WebSocket | Real-time push alerts from tzevaadom.co.il with automatic reconnection, keep-alive, early warning, and event-ended support (city IDs resolved from Tzofar's city database) |
 
 Both sources feed into the same deduplication pipeline, so you get the fastest possible alert delivery without duplicates.
 

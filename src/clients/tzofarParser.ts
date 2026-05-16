@@ -8,6 +8,9 @@ const THREAT_TO_CATEGORY: Record<number, number> = {
   7: OrefCategory.NonConventional,
 };
 
+const INSTRUCTION_TYPE_EARLY_WARNING = 0;
+const INSTRUCTION_TYPE_END_EVENT = 1;
+
 const EARLY_WARNING_KEYWORDS = [
   'בדקות הקרובות',
   'צפויות להתקבל התרעות',
@@ -22,6 +25,75 @@ const EXIT_NOTIFICATION_KEYWORDS = [
   'הסתיים באזורים',
   'האירוע הסתיים באזורים',
 ];
+
+const TZOFAR_CITIES_URL = 'https://www.tzevaadom.co.il/static/cities.json';
+
+let tzofarIdToName: Map<number, string> | null = null;
+let cityMapLoading: Promise<void> | null = null;
+
+/** @internal Test helper to inject a city map without network fetch */
+export function _setTzofarCityMap(map: Map<number, string> | null): void {
+  tzofarIdToName = map;
+  cityMapLoading = null;
+}
+
+export async function loadTzofarCityMap(): Promise<void> {
+  if (tzofarIdToName) {
+    return;
+  }
+  if (cityMapLoading) {
+    return cityMapLoading;
+  }
+  cityMapLoading = doLoadCityMap();
+  return cityMapLoading;
+}
+
+async function doLoadCityMap(): Promise<void> {
+  try {
+    let version = 10;
+    try {
+      const versionsRes = await fetch('https://api.tzevaadom.co.il/lists-versions');
+      const versions = await versionsRes.json() as Record<string, number>;
+      if (versions.cities) {
+        version = versions.cities;
+      }
+    } catch { /* use default version */ }
+
+    const res = await fetch(`${TZOFAR_CITIES_URL}?v=${version}`);
+    const json = await res.json() as { cities: Record<string, { id?: number; he?: string }> };
+    const map = new Map<number, string>();
+
+    for (const [key, city] of Object.entries(json.cities)) {
+      const tzofarId = city.id;
+      const name = city.he || key;
+      if (tzofarId !== undefined) {
+        map.set(tzofarId, name);
+      }
+    }
+
+    tzofarIdToName = map;
+    // eslint-disable-next-line no-console
+    console.log(`[Tzofar] Loaded ${map.size} cities from Tzofar API (v${version})`);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[Tzofar] Failed to load city map: ${err}. SYSTEM_MESSAGE citiesIds will fall back to body text.`);
+    tzofarIdToName = new Map();
+  }
+}
+
+export function resolveCityIds(ids: number[]): string[] {
+  if (!tzofarIdToName || tzofarIdToName.size === 0) {
+    return [];
+  }
+  const names: string[] = [];
+  for (const id of ids) {
+    const name = tzofarIdToName.get(id);
+    if (name) {
+      names.push(name);
+    }
+  }
+  return names;
+}
 
 export function parseTzofarMessage(message: any): OrefRealtimeAlert[] {
   if (!message || !message.type) {
@@ -71,9 +143,16 @@ function parseSystemMessage(data: any): OrefRealtimeAlert[] {
   }
 
   const body: string = data.bodyHe || '';
+  const instructionType: number | undefined = data.instructionType;
 
-  if (isEarlyWarning(data.titleHe, body)) {
-    const cities = extractCitiesFromBody(body);
+  const isEarly = instructionType === INSTRUCTION_TYPE_EARLY_WARNING
+    || (instructionType === undefined && isEarlyWarningByKeywords(data.titleHe, body));
+
+  const isEnd = instructionType === INSTRUCTION_TYPE_END_EVENT
+    || (instructionType === undefined && isExitNotificationByKeywords(data.titleHe, body));
+
+  if (isEarly) {
+    const cities = resolveCities(data.citiesIds, body);
     if (cities.length === 0) {
       return [];
     }
@@ -86,8 +165,8 @@ function parseSystemMessage(data: any): OrefRealtimeAlert[] {
     }];
   }
 
-  if (isExitNotification(data.titleHe, body)) {
-    const cities = extractCitiesFromBody(body);
+  if (isEnd) {
+    const cities = resolveCities(data.citiesIds, body);
     if (cities.length === 0) {
       return [];
     }
@@ -103,14 +182,24 @@ function parseSystemMessage(data: any): OrefRealtimeAlert[] {
   return [];
 }
 
-function isEarlyWarning(title: string | undefined, body: string): boolean {
+function resolveCities(citiesIds: number[] | undefined, body: string): string[] {
+  if (Array.isArray(citiesIds) && citiesIds.length > 0) {
+    const resolved = resolveCityIds(citiesIds);
+    if (resolved.length > 0) {
+      return resolved;
+    }
+  }
+  return extractCitiesFromBody(body);
+}
+
+function isEarlyWarningByKeywords(title: string | undefined, body: string): boolean {
   if (!title?.includes('מבזק פיקוד העורף')) {
     return false;
   }
   return EARLY_WARNING_KEYWORDS.some((kw) => body.includes(kw));
 }
 
-function isExitNotification(title: string | undefined, body: string): boolean {
+function isExitNotificationByKeywords(title: string | undefined, body: string): boolean {
   if (!title?.includes('עדכון פיקוד העורף')) {
     return false;
   }
