@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  Multi-source alert pipeline — Pikud HaOref HTTP + Tzofar WebSocket built-in, with support for custom add-on sources. No Telegram, no middleman, no authentication required.
+  Multi-source alert pipeline — Pikud HaOref HTTP + Tzofar WebSocket built-in, with add-on sources including Telegram channels, Mako, and more.
 </p>
 
 ---
@@ -46,7 +46,7 @@
 - **Prefix matching** — Match sub-areas automatically (e.g. "תל אביב" matches "תל אביב - יפו").
 - **Webhooks** — Fire HTTP POST/PUT to any URL when a sensor activates or deactivates. Payload includes sensor name, city, title, and timestamp. Configure multiple endpoints with a 10-second timeout per request.
 - **Health check accessory** — Optional HomeKit switch that turns OFF when all sources are unreachable.
-- **Source marketplace (Beta)** — One-click add pre-configured third-party alert sources (Mako, Prog.co.il) from the config UI. These sources are experimental and not recommended for production use.
+- **Source marketplace (Beta)** — One-click add pre-configured add-on sources from the config UI: Mako (HTTP), Prog.co.il (HTTP), and Telegram channels (Kumta Rockets, Kumta Terror). All add-on sources are in beta. Telegram sources use QR-based login — no bot tokens needed.
 - **Automatic config migration** — v1.x comma-separated city strings and `custom_cities` fields are auto-migrated atomically on first launch.
 
 ---
@@ -55,7 +55,7 @@
 
 | Metric | v1 | v2 | Notes |
 |--------|----|----|-------|
-| Alert sources | 1 (Pikud HaOref HTTP) | 2+ (HTTP + WebSocket + custom) | Fastest alert wins |
+| Alert sources | 1 (Pikud HaOref HTTP) | 2+ (HTTP + WebSocket + add-ons) | Fastest alert wins |
 | Deduplication | None | Sliding 30s window | No duplicate sensor triggers |
 | Expiry | Per-sensor timer | Centralized ExpiryStage | Zero per-poll overhead |
 | Network connections | 1 HTTP poll | 1 HTTP poll + 1 WebSocket | +1 persistent connection |
@@ -73,7 +73,7 @@
 ## How It Works
 
 1. The plugin creates one **motion sensor** per configured sensor in HomeKit.
-2. An **alert pipeline** ingests alerts from multiple sources simultaneously — **Pikud HaOref** (HTTP polling every 1s) and **Tzofar** (WebSocket push, ~50ms delivery) are built-in. Custom HTTP/WebSocket sources can be added.
+2. An **alert pipeline** ingests alerts from multiple sources simultaneously — **Pikud HaOref** (HTTP polling every 1s) and **Tzofar** (WebSocket push, ~50ms delivery) are built-in. Add-on sources (Telegram channels, Mako, Prog.co.il, or custom HTTP/WebSocket) can be added via the UI.
 3. On each poll, alerts first pass through an **ExpiryStage** — it reads the dedup's active city timestamps and injects synthetic "Event Ended" alerts for cities that haven't been refreshed within the configured timeout (default: 30 min). This scan runs every ~30 seconds with zero per-poll cost.
 4. Alerts (including any synthetic event-ended) then pass through a **DeduplicationStage** — a per-category city-level check (30s sliding window) ensures cross-source duplicates only fire once. The stage simultaneously builds a `ParsedAlerts` structure for downstream consumers (zero extra parsing).
 5. Each sensor independently filters deduplicated alerts by its configured cities, categories, and optional prefix matching.
@@ -88,8 +88,8 @@
 
 ```
 ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
-│  Pikud HaOref  │  │     Tzofar     │  │ Custom Source  │
-│  (HTTP poll)   │  │  (WebSocket)   │  │  (HTTP / WS)  │
+│  Pikud HaOref  │  │     Tzofar     │  │  Add-on Source │
+│  (HTTP poll)   │  │  (WebSocket)   │  │ (HTTP/WS/TG)  │
 └───────┬────────┘  └───────┬────────┘  └───────┬────────┘
         │                   │                    │
         └───────────────────┼────────────────────┘
@@ -199,7 +199,7 @@ Each sensor creates a separate motion sensor in HomeKit with its own cities, cat
 
 ### Built-in Sources
 
-The plugin ships with two alert sources that run simultaneously:
+The plugin ships with two built-in alert sources that run simultaneously:
 
 | Source | Type | Description |
 |--------|------|-------------|
@@ -208,9 +208,32 @@ The plugin ships with two alert sources that run simultaneously:
 
 Both sources feed into the same deduplication pipeline, so you get the fastest possible alert delivery without duplicates.
 
+### Source Marketplace (Beta)
+
+The config UI includes a one-click marketplace for add-on sources. All marketplace sources are in **beta** and are not recommended as your sole alert source:
+
+| Source | Type | Description |
+|--------|------|-------------|
+| **Mako** | HTTP | Mako/N12 news mirror of Pikud HaOref. No geo-restriction. |
+| **Prog.co.il** | HTTP | Independent alert mirror with per-city items and TTL. |
+| **Kumta Rockets** | Telegram | Kumta channel for rocket & missile alerts. Requires Telegram API credentials. |
+| **Kumta Terror** | Telegram | Kumta channel for terrorist infiltration alerts. Requires Telegram API credentials. |
+
+### Telegram Sources (Beta)
+
+Telegram sources monitor alert channels and parse city names from message content. Setup:
+
+1. Get API credentials from [my.telegram.org](https://my.telegram.org)
+2. Add a Telegram source from the **Source Marketplace** (e.g. Kumta Rockets, Kumta Terror)
+3. Enter your API ID and API Hash when prompted
+4. Scan the QR code in Telegram (Settings > Devices > Link Desktop Device)
+5. Once connected, the session is saved — no re-authentication needed on restart
+
+Each Telegram source has a default alert category (e.g. rockets, terror) used when no keyword is detected in the message header. City names are extracted from the message body and matched against the plugin's city database.
+
 ### Custom Add-on Sources
 
-You can add custom HTTP or WebSocket sources via the UI or `config.json`. Custom sources support category mapping to translate source-specific alert types to the plugin's categories — including `eventended` to signal that an alert has cleared:
+You can add custom HTTP, WebSocket, or Telegram sources via the UI or `config.json`. Custom sources support category mapping to translate source-specific alert types to the plugin's categories — including `eventended` to signal that an alert has cleared:
 
 ```json
 {
@@ -334,6 +357,13 @@ The `event` field is `"alert"` when a sensor activates and `"ended"` when it dea
 | `method` | No | `POST` | HTTP method (`POST` or `PUT`) |
 | `headers` | No | `{}` | Custom headers (e.g. `{"Authorization": "Bearer ..."}`) |
 
+### Telegram Options
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `telegram_api_id` | Yes* | — | Telegram API ID from [my.telegram.org](https://my.telegram.org). Required when using Telegram sources |
+| `telegram_api_hash` | Yes* | — | Telegram API Hash from [my.telegram.org](https://my.telegram.org). Required when using Telegram sources |
+
 ### General
 
 | Option | Default | Description |
@@ -341,6 +371,8 @@ The `event` field is `"alert"` when a sensor activates and `"ended"` when it dea
 | `debug` | `false` | Enable extra debug logging |
 
 ### Available Categories
+
+These categories can be selected per-sensor to filter which alert types trigger the sensor:
 
 | Key | Description |
 |-----|-------------|
@@ -353,7 +385,8 @@ The `event` field is `"alert"` when a sensor activates and `"ended"` when it dea
 | `terror` | Terrorist Infiltration (חדירת מחבלים) |
 | `tsunami` | Tsunami (צונאמי) |
 | `hazmat` | Hazardous Materials (חומרים מסוכנים) |
-| `eventended` | Event Ended — clears active alerts for the listed cities |
+
+> **Note:** `eventended` is a special mapping key available only in custom source `category_mapping`. It signals that alerts have cleared for the listed cities. It is not selectable per-sensor — event-ended is always processed automatically to deactivate sensors.
 
 ---
 

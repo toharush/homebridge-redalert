@@ -230,7 +230,7 @@ export class WebSocketSource implements AlertSource {
 
   private onFailure(): void {
     this.consecutiveFailures++;
-    if (this.healthy) {
+    if (this.healthy && this.consecutiveFailures >= this.config.failureThreshold) {
       this.healthy = false;
       this.healthCallback?.(false);
     }

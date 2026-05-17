@@ -59,6 +59,7 @@ export class SensorFilter implements AlertListener {
   private readonly citySet: Set<string>;
   private readonly activeCities = new Map<string, number>();
   private readonly webhook: WebhookService | null;
+  private hasBroadcast = false;
 
   constructor(
     private readonly name: string,
@@ -78,6 +79,19 @@ export class SensorFilter implements AlertListener {
 
     const nationwideEnd = endedCities.has(NATIONWIDE_CITY);
     const nationwideAlert = this.findNationwideAlert(relevantCities);
+
+    if (this.hasBroadcast && !nationwideEnd && !nationwideAlert && !this.prefixMatching && this.activeCities.size === 0) {
+      let hasRelevant = false;
+      for (const alertCity of relevantCities.keys()) {
+        if (this.citySet.has(alertCity)) {
+          hasRelevant = true;
+          break;
+        }
+      }
+      if (!hasRelevant) {
+        return;
+      }
+    }
 
     for (const configured of this.citySet) {
       if ((nationwideEnd || this.findMatchInSet(configured, endedCities)) && this.activeCities.delete(configured)) {
@@ -154,6 +168,7 @@ export class SensorFilter implements AlertListener {
   }
 
   private broadcastState(): void {
+    this.hasBroadcast = true;
     const state: AlertState = {
       isActive: this.activeCities.size > 0,
       activeCities: this.activeCities,
