@@ -7,7 +7,6 @@ import { ExpiryStage } from './ExpiryStage';
 import { AlertHistory } from './AlertHistory';
 import { SensorFilter } from '../services/SensorFilter';
 import { WebSocketSource } from '../clients/webSocketSource';
-import { OrefCategory } from '../types';
 import { CATEGORY_MAP } from '../types';
 
 function createLogger() {
@@ -98,7 +97,10 @@ describe('WebSocket Integration Tests', () => {
       categoryMapping: { '0': 'rockets', '5': 'uav', '2': 'terror', '7': 'nonconventional', '99': 'eventended' },
       messageType: 'ALERT',
       messageDataField: 'data',
-      responseFormat: { id_field: 'id', category_field: 'threat', title_field: 'title', cities_field: 'data', description_field: 'desc', alerts_path: '$' },
+      responseFormat: {
+        id_field: 'id', category_field: 'threat', title_field: 'title',
+        cities_field: 'data', description_field: 'desc', alerts_path: '$',
+      },
     }));
 
     pipeline.start();
@@ -132,7 +134,10 @@ describe('WebSocket Integration Tests', () => {
       categoryMapping: { '0': 'rockets', '99': 'eventended' },
       messageType: 'ALERT',
       messageDataField: 'data',
-      responseFormat: { id_field: 'id', category_field: 'threat', title_field: 'title', cities_field: 'data', description_field: 'desc', alerts_path: '$' },
+      responseFormat: {
+        id_field: 'id', category_field: 'threat', title_field: 'title',
+        cities_field: 'data', description_field: 'desc', alerts_path: '$',
+      },
     }));
 
     pipeline.start();
@@ -175,7 +180,10 @@ describe('WebSocket Integration Tests', () => {
       categoryMapping: { '0': 'rockets' },
       messageType: 'ALERT',
       messageDataField: 'data',
-      responseFormat: { id_field: 'id', category_field: 'threat', title_field: 'title', cities_field: 'data', description_field: 'desc', alerts_path: '$' },
+      responseFormat: {
+        id_field: 'id', category_field: 'threat', title_field: 'title',
+        cities_field: 'data', description_field: 'desc', alerts_path: '$',
+      },
     }));
 
     pipeline.start();
@@ -214,7 +222,10 @@ describe('WebSocket Integration Tests', () => {
       categoryMapping: { '0': 'rockets', '5': 'uav', '99': 'eventended' },
       messageType: 'ALERT',
       messageDataField: 'data',
-      responseFormat: { id_field: 'id', category_field: 'threat', title_field: 'title', cities_field: 'data', description_field: 'desc', alerts_path: '$' },
+      responseFormat: {
+        id_field: 'id', category_field: 'threat', title_field: 'title',
+        cities_field: 'data', description_field: 'desc', alerts_path: '$',
+      },
     }));
 
     pipeline.start();
@@ -250,7 +261,10 @@ describe('WebSocket Integration Tests', () => {
       categoryMapping: { '0': 'rockets', '99': 'eventended' },
       messageType: 'ALERT',
       messageDataField: 'data',
-      responseFormat: { id_field: 'id', category_field: 'threat', title_field: 'title', cities_field: 'data', description_field: 'desc', alerts_path: '$' },
+      responseFormat: {
+        id_field: 'id', category_field: 'threat', title_field: 'title',
+        cities_field: 'data', description_field: 'desc', alerts_path: '$',
+      },
     }));
 
     pipeline.start();
@@ -295,7 +309,10 @@ describe('WebSocket Integration Tests', () => {
       categoryMapping: { '0': 'rockets' },
       messageType: 'ALERT',
       messageDataField: 'data',
-      responseFormat: { id_field: 'id', category_field: 'threat', title_field: 'title', cities_field: 'data', description_field: 'desc', alerts_path: '$' },
+      responseFormat: {
+        id_field: 'id', category_field: 'threat', title_field: 'title',
+        cities_field: 'data', description_field: 'desc', alerts_path: '$',
+      },
     }));
 
     pipeline.start();
@@ -328,7 +345,10 @@ describe('WebSocket Integration Tests', () => {
       categoryMapping: { '0': 'rockets' },
       messageType: 'ALERT',
       messageDataField: 'data',
-      responseFormat: { id_field: 'id', category_field: 'threat', title_field: 'title', cities_field: 'data', description_field: 'desc', alerts_path: '$' },
+      responseFormat: {
+        id_field: 'id', category_field: 'threat', title_field: 'title',
+        cities_field: 'data', description_field: 'desc', alerts_path: '$',
+      },
     }));
 
     pipeline.start();
@@ -387,7 +407,10 @@ describe('WebSocket Integration Tests', () => {
       categoryMapping: { '0': 'rockets', '99': 'eventended' },
       messageType: 'ALERT',
       messageDataField: 'data',
-      responseFormat: { id_field: 'id', category_field: 'threat', title_field: 'title', cities_field: 'data', description_field: 'desc', alerts_path: '$' },
+      responseFormat: {
+        id_field: 'id', category_field: 'threat', title_field: 'title',
+        cities_field: 'data', description_field: 'desc', alerts_path: '$',
+      },
     }));
 
     pipeline.start();
