@@ -95,7 +95,7 @@ export class HttpSource implements AlertSource {
         this.onSuccess();
       })
       .catch((err: Error) => {
-        if (err.name === 'AbortError') {
+        if (err.name === 'AbortError' && !this.polling) {
           return;
         }
         this.onFailure(err, Date.now() - start);
