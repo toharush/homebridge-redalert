@@ -9,6 +9,14 @@ export interface SourceHealth {
 export class HealthStatusService {
   constructor(private readonly filePath: string) {}
 
+  clear(): void {
+    try {
+      fs.unlinkSync(this.filePath);
+    } catch {
+      // file may not exist
+    }
+  }
+
   update(status: SourceHealth[]): void {
     const tmp = this.filePath + '.tmp';
     fs.promises.writeFile(tmp, JSON.stringify(status))

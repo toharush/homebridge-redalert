@@ -2,7 +2,7 @@ import { OrefRealtimeAlert } from '../types';
 
 export interface AlertSource {
   readonly name: string;
-  readonly type: 'http' | 'websocket';
+  readonly type: 'http' | 'websocket' | 'telegram';
 
   start(): void;
   stop(): void;
