@@ -815,7 +815,7 @@ describe('pipeline async polling', () => {
     assert.ok(callCount >= 4);
   });
 
-  it('silently handles AbortError from fetch timeout', async () => {
+  it('treats AbortError as failure when source is polling', async () => {
     globalThis.fetch = mock.fn(() => {
       const err = new Error('The operation was aborted');
       err.name = 'AbortError';
@@ -836,7 +836,7 @@ describe('pipeline async polling', () => {
     await new Promise((r) => setTimeout(r, 50));
     pipeline.stop();
 
-    assert.strictEqual(log.error.mock.calls.length, 0);
+    assert.ok(log.error.mock.calls.length > 0);
   });
 
   it('logs errors for non-abort fetch failures', async () => {
