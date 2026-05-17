@@ -63,24 +63,29 @@ export class AlertHistory implements AlertListener {
     if (this.entryCount <= this.maxSize) {
       return;
     }
-    const overflow = this.entryCount - this.maxSize;
-    let removed = 0;
+
+    const targetSize = (this.maxSize * 3) >>> 2;
+    const toRemove = this.entryCount - targetSize;
+
+    const all = new Array<{ cat: string; city: string; timestamp: number }>(this.entryCount);
+    let idx = 0;
     for (const [cat, catMap] of this.entries) {
-      for (const [city] of catMap) {
-        catMap.delete(city);
-        removed++;
-        if (removed >= overflow) {
-          break;
-        }
+      for (const [city, entry] of catMap) {
+        all[idx++] = { cat, city, timestamp: entry.timestamp };
       }
+    }
+    all.sort((a, b) => a.timestamp - b.timestamp);
+
+    for (let i = 0; i < toRemove; i++) {
+      const { cat, city } = all[i];
+      this.entries.get(cat)!.delete(city);
+    }
+    for (const [cat, catMap] of this.entries) {
       if (catMap.size === 0) {
         this.entries.delete(cat);
       }
-      if (removed >= overflow) {
-        break;
-      }
     }
-    this.entryCount -= removed;
+    this.entryCount -= toRemove;
   }
 
   markEnded(city: string): boolean {

@@ -8,7 +8,7 @@ import { ExpiryStage } from './ExpiryStage';
 
 export interface SourceStatus {
   name: string;
-  type: 'http' | 'websocket';
+  type: 'http' | 'websocket' | 'telegram';
   healthy: boolean;
 }
 
@@ -73,6 +73,7 @@ export class AlertPipeline {
     for (let i = 0; i < this.sources.length; i++) {
       this.sources[i].start();
     }
+    this.lastHealthSnapshot = this.getSourceStatus().map((s) => s.healthy ? '1' : '0').join('');
   }
 
   stop(): void {

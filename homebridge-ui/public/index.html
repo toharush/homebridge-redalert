@@ -165,13 +165,15 @@
 
   <!-- Source Marketplace -->
   <div class="section-title" style="margin-top: 24px">Source Marketplace</div>
-  <p style="font-size: 0.85em; color: var(--text-muted); margin: 0 0 12px">Click to add a pre-configured source. These are third-party mirrors &mdash; no geo-restriction, no authentication.</p>
+  <p style="font-size: 0.85em; color: var(--text-muted); margin: 0 0 12px">Click to add a pre-configured source. Some sources may require authentication.</p>
+  <div class="field-group" style="margin-bottom: 12px;">
+    <input type="text" id="marketplace-search" placeholder="Search sources..." oninput="filterMarketplace()" style="width: 100%; max-width: 300px;">
+  </div>
   <div id="marketplace-container">
     <div class="marketplace-card" onclick="addMarketplaceSource('mako')">
       <div class="marketplace-header">
         <span class="marketplace-name">Mako</span>
-        <span class="source-badge">HTTP</span>
-        <span class="marketplace-beta-badge">Beta</span>
+        <div class="marketplace-badges"><span class="source-badge">HTTP</span><span class="marketplace-beta-badge">Beta</span></div>
       </div>
       <div class="marketplace-desc">Mako/N12 news mirror of Pikud HaOref. Identical format to official API. No geo-restriction.</div>
       <div class="marketplace-url">mako.co.il</div>
@@ -179,11 +181,26 @@
     <div class="marketplace-card" onclick="addMarketplaceSource('prog')">
       <div class="marketplace-header">
         <span class="marketplace-name">Prog.co.il</span>
-        <span class="source-badge">HTTP</span>
-        <span class="marketplace-beta-badge">Beta</span>
+        <div class="marketplace-badges"><span class="source-badge">HTTP</span><span class="marketplace-beta-badge">Beta</span></div>
       </div>
       <div class="marketplace-desc">Independent alert mirror with per-city items and TTL. Includes English category names.</div>
       <div class="marketplace-url">prog.co.il</div>
+    </div>
+    <div class="marketplace-card" onclick="addMarketplaceSource('kumta_rockets')">
+      <div class="marketplace-header">
+        <span class="marketplace-name">Kumta Rockets</span>
+        <div class="marketplace-badges"><span class="source-badge">Telegram</span><span class="marketplace-beta-badge">Beta</span></div>
+      </div>
+      <div class="marketplace-desc">Kumta Telegram channel for rocket &amp; missile alerts. Requires Telegram API credentials.</div>
+      <div class="marketplace-url">t.me/CumtaAlertsChannel</div>
+    </div>
+    <div class="marketplace-card" onclick="addMarketplaceSource('kumta_terror')">
+      <div class="marketplace-header">
+        <span class="marketplace-name">Kumta Terror</span>
+        <div class="marketplace-badges"><span class="source-badge">Telegram</span><span class="marketplace-beta-badge">Beta</span></div>
+      </div>
+      <div class="marketplace-desc">Kumta Telegram channel for terrorist infiltration alerts. Requires Telegram API credentials.</div>
+      <div class="marketplace-url">t.me/CumtaAlerts2Channel</div>
     </div>
   </div>
 
@@ -203,6 +220,20 @@
   <div id="sensors-container"></div>
   <div id="sensors-actions-bar" class="sensor-actions">
     <button class="btn-add" onclick="addSensor()">+ Add Sensor</button>
+    </div>
+  </div>
+
+  <!-- Telegram Credentials (shown when telegram sources exist) -->
+  <div id="telegram-credentials-section" style="display:none; margin-top: 16px;">
+    <div class="section-title">Telegram Credentials</div>
+    <p style="font-size: 0.85em; color: var(--text-muted); margin: 0 0 12px">Required for Telegram sources. Get your API credentials from <a href="https://my.telegram.org" target="_blank">my.telegram.org</a>.</p>
+    <div class="field-group">
+      <label>API ID</label>
+      <input type="text" id="telegram_api_id" placeholder="e.g. 12345678">
+    </div>
+    <div class="field-group">
+      <label>API Hash</label>
+      <input type="text" id="telegram_api_hash" placeholder="e.g. abc123def456...">
     </div>
   </div>
 
@@ -445,8 +476,11 @@
     document.getElementById("health_check_threshold").value =
       config.health_check_threshold ?? 5;
     document.getElementById("debug").checked = config.debug ?? false;
+    document.getElementById("telegram_api_id").value = config.telegram_api_id ?? "";
+    document.getElementById("telegram_api_hash").value = config.telegram_api_hash ?? "";
 
     addonSources.forEach((s) => renderAddonSource(s));
+    updateTelegramCredentialsVisibility();
     (config.webhooks || []).forEach((h) => renderWebhook(h));
 
     sensors.forEach((s, i) => renderSensor(s, i));
@@ -467,7 +501,7 @@
     }
 
     const displayName = source.name || "Custom Source";
-    const typeLabel = source.type === "websocket" ? "WebSocket" : "HTTP";
+    const typeLabel = source.type === "websocket" ? "WebSocket" : source.type === "telegram" ? "Telegram" : "HTTP";
     const urlHost = (() => { try { return new URL(source.url || "").host; } catch { return source.url || ""; } })();
 
     card.innerHTML = `
@@ -487,6 +521,7 @@
             <select class="addon-type">
               <option value="http" ${source.type === "http" ? "selected" : ""}>HTTP</option>
               <option value="websocket" ${source.type === "websocket" ? "selected" : ""}>WebSocket</option>
+              ${source.type === "telegram" ? `<option value="telegram" selected disabled>Telegram</option>` : ""}
             </select>
           </div>
           <div class="field-group">
@@ -537,6 +572,13 @@
             <input type="text" class="addon-message-data-field" value="${escapeHtml(source.message_data_field || "")}" placeholder="e.g. data">
             <div class="help-text">Extract alert data from this field of the message.</div>
           </div>
+          <div class="field-group addon-tg-fields" style="${source.type === "telegram" ? "" : "display:none"}">
+            <label>Fallback Category</label>
+            <select class="addon-tg-category">
+              ${CATEGORIES.filter(c => c.key !== "eventended").map((c) => `<option value="${c.key}" ${(source.category || "rockets") === c.key ? "selected" : ""}>${c.label}</option>`).join("")}
+            </select>
+            <div class="help-text">Default alert category when no keyword is detected in the message header.</div>
+          </div>
         </div>
       </div>
     `;
@@ -546,11 +588,11 @@
     const typeSelect = card.querySelector(".addon-type");
     typeSelect.addEventListener("change", () => {
       const wsFields = card.querySelectorAll(".addon-ws-fields");
-      wsFields.forEach(
-        (f) =>
-          (f.style.display = typeSelect.value === "websocket" ? "" : "none"),
-      );
+      wsFields.forEach((f) => (f.style.display = typeSelect.value === "websocket" ? "" : "none"));
+      const tgFields = card.querySelectorAll(".addon-tg-fields");
+      tgFields.forEach((f) => (f.style.display = typeSelect.value === "telegram" ? "" : "none"));
       syncConfig();
+      updateTelegramCredentialsVisibility();
     });
 
     const catmapContainer = document.getElementById(`catmap-${id}`);
@@ -595,6 +637,18 @@
       response_format: { alerts_path: "items", category_field: "category", cities_field: "header", title_field: "title" },
       category_mapping: { "MissileAlert": "rockets", "UAVAlert": "uav", "EarthquakeAlert": "earthquake", "TerrorAlert": "terror", "NonConventionalAlert": "nonconventional" },
     },
+    kumta_rockets: {
+      name: "Kumta Rockets",
+      type: "telegram",
+      url: "https://t.me/CumtaAlertsChannel",
+      category: "rockets",
+    },
+    kumta_terror: {
+      name: "Kumta Terror",
+      type: "telegram",
+      url: "https://t.me/CumtaAlerts2Channel",
+      category: "terror",
+    },
   };
 
   function addMarketplaceSource(key) {
@@ -607,15 +661,189 @@
         return;
       }
     }
+
+    if (template.type === "telegram") {
+      showTelegramSetupDialog(key, template);
+    } else {
+      renderAddonSource({ ...template });
+      syncConfig();
+      homebridge.toast.success(`Added "${template.name}" source.`);
+    }
+  }
+
+  let tgAuthPollInterval = null;
+
+  function showTelegramSetupDialog(key, template) {
+    const existingApiId = document.getElementById("telegram_api_id").value.trim();
+    const existingApiHash = document.getElementById("telegram_api_hash").value.trim();
+    const isFirstTelegram = ![...document.querySelectorAll(".addon-type")].some((sel) => sel.value === "telegram");
+
+    if (!isFirstTelegram) {
+      renderAddonSource({ ...template });
+      syncConfig();
+      updateTelegramCredentialsVisibility();
+      homebridge.toast.success(`Added "${template.name}" source.`);
+      return;
+    }
+
+    const dialog = document.createElement("div");
+    dialog.className = "marketplace-dialog-overlay";
+    dialog.innerHTML = `
+      <div class="marketplace-dialog">
+        <div id="tg-step-credentials">
+          <h5>Add "${escapeHtml(template.name)}"</h5>
+          <p style="font-size:0.85em;color:var(--text-muted);margin:0 0 12px;">
+            Telegram sources require API credentials from <a href="https://my.telegram.org" target="_blank">my.telegram.org</a>.
+          </p>
+          <div class="field-group">
+            <label>Telegram API ID</label>
+            <input type="text" id="dialog-tg-api-id" value="${escapeHtml(existingApiId)}" placeholder="e.g. 12345678">
+          </div>
+          <div class="field-group">
+            <label>Telegram API Hash</label>
+            <input type="text" id="dialog-tg-api-hash" value="${escapeHtml(existingApiHash)}" placeholder="e.g. abc123def456...">
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+            <button class="btn-secondary" onclick="closeTelegramDialog()">Cancel</button>
+            <button class="btn-add" onclick="confirmTelegramSource('${key}')">Save & Add Source</button>
+          </div>
+        </div>
+        <div id="tg-step-auth" style="display:none;">
+          <h5>Telegram Login</h5>
+          <div id="tg-auth-status">
+            <div style="text-align:center;padding:20px;">
+              <div class="tg-spinner"></div>
+              <p style="margin:12px 0 0;font-size:0.85em;color:var(--text-muted);">Checking authentication status...</p>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+            <button class="btn-secondary" onclick="closeTelegramDialog()">Close</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(dialog);
+  }
+
+  function closeTelegramDialog() {
+    if (tgAuthPollInterval) {
+      clearInterval(tgAuthPollInterval);
+      tgAuthPollInterval = null;
+    }
+    const overlay = document.querySelector(".marketplace-dialog-overlay");
+    if (overlay) overlay.remove();
+  }
+
+  function confirmTelegramSource(key) {
+    const template = MARKETPLACE_SOURCES[key];
+    const apiId = document.getElementById("dialog-tg-api-id").value.trim();
+    const apiHash = document.getElementById("dialog-tg-api-hash").value.trim();
+
+    if (!apiId || !apiHash) {
+      homebridge.toast.error("API ID and API Hash are required.");
+      return;
+    }
+
+    document.getElementById("telegram_api_id").value = apiId;
+    document.getElementById("telegram_api_hash").value = apiHash;
+
     renderAddonSource({ ...template });
     syncConfig();
+    updateTelegramCredentialsVisibility();
     homebridge.toast.success(`Added "${template.name}" source.`);
+
+    document.getElementById("tg-step-credentials").style.display = "none";
+    document.getElementById("tg-step-auth").style.display = "";
+    startTelegramAuthPoll();
+  }
+
+  function startTelegramAuthPoll() {
+    pollTelegramAuth();
+    tgAuthPollInterval = setInterval(pollTelegramAuth, 2000);
+  }
+
+  async function pollTelegramAuth() {
+    try {
+      const auth = await homebridge.request("/telegram-auth");
+      const container = document.getElementById("tg-auth-status");
+      if (!container) return;
+
+      if (auth.status === "connected") {
+        container.innerHTML = `
+          <div style="text-align:center;padding:20px;">
+            <div style="font-size:2em;">&#9989;</div>
+            <p style="margin:12px 0 0;font-weight:600;color:var(--accent-green,#198754);">Connected to Telegram</p>
+            <p style="font-size:0.85em;color:var(--text-muted);margin:8px 0 0;">Session saved. Telegram sources are active.</p>
+          </div>
+        `;
+        if (tgAuthPollInterval) { clearInterval(tgAuthPollInterval); tgAuthPollInterval = null; }
+      } else if (auth.status === "waiting_qr") {
+        container.innerHTML = `
+          <div style="text-align:center;padding:16px;">
+            <p style="font-weight:600;margin:0 0 8px;">Scan QR Code in Telegram</p>
+            <p style="font-size:0.85em;color:var(--text-muted);margin:0 0 12px;">Open Telegram &gt; Settings &gt; Devices &gt; Link Desktop Device</p>
+            <div style="background:#fff;padding:16px;border-radius:8px;display:inline-block;">
+              <img id="tg-qr-img" style="width:200px;height:200px;" src="" alt="QR Code">
+            </div>
+            <p style="font-size:0.75em;color:var(--text-muted);margin:12px 0 0;word-break:break-all;">
+              <a href="${escapeHtml(auth.qrUrl)}" target="_blank">${escapeHtml(auth.qrUrl)}</a>
+            </p>
+          </div>
+        `;
+        const qrImg = document.getElementById("tg-qr-img");
+        if (qrImg && auth.qrUrl) {
+          qrImg.src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(auth.qrUrl);
+        }
+      } else if (auth.status === "error") {
+        container.innerHTML = `
+          <div style="text-align:center;padding:20px;">
+            <div style="font-size:2em;">&#10060;</div>
+            <p style="margin:12px 0 0;font-weight:600;color:var(--accent-red,#dc3545);">Authentication Failed</p>
+            <p style="font-size:0.85em;color:var(--text-muted);margin:8px 0 0;">${escapeHtml(auth.error || "Unknown error")}</p>
+            <p style="font-size:0.85em;color:var(--text-muted);margin:8px 0 0;">Restart Homebridge to retry.</p>
+          </div>
+        `;
+        if (tgAuthPollInterval) { clearInterval(tgAuthPollInterval); tgAuthPollInterval = null; }
+      } else if (auth.status === "not_configured") {
+        container.innerHTML = `
+          <div style="text-align:center;padding:20px;">
+            <div style="font-size:2em;">&#9888;&#65039;</div>
+            <p style="margin:12px 0 0;font-weight:600;">Restart Required</p>
+            <p style="font-size:0.85em;color:var(--text-muted);margin:8px 0 0;">Restart Homebridge to start the Telegram login process. A QR code will appear here.</p>
+          </div>
+        `;
+      } else {
+        container.innerHTML = `
+          <div style="text-align:center;padding:20px;">
+            <div class="tg-spinner"></div>
+            <p style="margin:12px 0 0;font-size:0.85em;color:var(--text-muted);">Connecting to Telegram...</p>
+          </div>
+        `;
+      }
+    } catch {
+      // silent
+    }
+  }
+
+  function updateTelegramCredentialsVisibility() {
+    const hasTelegram = [...document.querySelectorAll(".addon-type")].some((sel) => sel.value === "telegram");
+    document.getElementById("telegram-credentials-section").style.display = hasTelegram ? "" : "none";
+  }
+
+  function filterMarketplace() {
+    const query = document.getElementById("marketplace-search").value.toLowerCase().trim();
+    document.querySelectorAll(".marketplace-card").forEach((card) => {
+      const name = card.querySelector(".marketplace-name").textContent.toLowerCase();
+      const desc = card.querySelector(".marketplace-desc").textContent.toLowerCase();
+      card.style.display = (!query || name.includes(query) || desc.includes(query)) ? "" : "none";
+    });
   }
 
 
   function removeAddonSource(id) {
     document.getElementById(`addon-source-${id}`).remove();
     syncConfig();
+    updateTelegramCredentialsVisibility();
   }
 
   function getUsedCategories(container, excludeRow) {
@@ -709,6 +937,11 @@
           .value.trim();
         if (msgType) source.message_type = msgType;
         if (msgDataField) source.message_data_field = msgDataField;
+      }
+
+      if (type === "telegram") {
+        const tgCat = card.querySelector(".addon-tg-category");
+        if (tgCat && tgCat.value) source.category = tgCat.value;
       }
 
       if (card.dataset.responseFormat) {
@@ -952,6 +1185,11 @@
     if (customSources.length > 0) {
       config.custom_sources = customSources;
     }
+
+    const tgApiId = document.getElementById("telegram_api_id").value.trim();
+    const tgApiHash = document.getElementById("telegram_api_hash").value.trim();
+    if (tgApiId) config.telegram_api_id = tgApiId;
+    if (tgApiHash) config.telegram_api_hash = tgApiHash;
 
     const webhooks = collectWebhooks();
     if (webhooks.length > 0) {
@@ -1296,8 +1534,13 @@
       if (!sources || !Array.isArray(sources)) {
         setStatusDot("status-pikud-haoref", "unknown");
         setStatusDot("status-tzofar", "unknown");
+        resetAllAddonDots("unknown");
         return;
       }
+
+      // Reset all addon dots before applying fresh state
+      resetAllAddonDots("unknown");
+
       for (const src of sources) {
         if (src.name === "Pikud HaOref") {
           setStatusDot("status-pikud-haoref", src.healthy ? "healthy" : "unhealthy");
@@ -1313,7 +1556,15 @@
     } catch {
       setStatusDot("status-pikud-haoref", "unknown");
       setStatusDot("status-tzofar", "unknown");
+      resetAllAddonDots("unknown");
     }
+  }
+
+  function resetAllAddonDots(state) {
+    document.querySelectorAll("[id^='status-addon-']").forEach((el) => {
+      el.className = "source-status-dot status-" + state;
+      el.title = state === "unknown" ? "Unknown" : state;
+    });
   }
 
   function findAddonIndexByName(name) {

@@ -696,13 +696,19 @@
 .marketplace-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
   margin-bottom: 6px;
 }
 
 .marketplace-name {
   font-weight: 600;
   font-size: 0.95em;
+}
+
+.marketplace-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .marketplace-desc {
@@ -727,7 +733,6 @@
   border-radius: 4px;
   background: #f59e0b;
   color: #fff;
-  margin-left: 6px;
   letter-spacing: 0.5px;
 }
 
@@ -874,4 +879,61 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.marketplace-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.marketplace-dialog {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  padding: 24px;
+  width: 90%;
+  max-width: 420px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.marketplace-dialog h5 {
+  margin: 0 0 8px;
+}
+
+.marketplace-dialog .field-group {
+  margin-bottom: 12px;
+}
+
+.marketplace-dialog .field-group label {
+  display: block;
+  font-size: 0.85em;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.marketplace-dialog .field-group input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-input);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-input);
+}
+
+.tg-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-input);
+  border-top-color: var(--accent-blue, #0d6efd);
+  border-radius: 50%;
+  animation: tg-spin 0.8s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes tg-spin {
+  to { transform: rotate(360deg); }
 }
