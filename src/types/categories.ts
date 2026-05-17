@@ -30,4 +30,4 @@ export const CATEGORY_MAP: Record<string, number[]> = {
   eventended: [OrefCategory.EventEnded],
 };
 
-export const ALL_CATEGORY_KEYS = Object.keys(CATEGORY_MAP);
+export const ALL_CATEGORY_KEYS = Object.keys(CATEGORY_MAP).filter(k => k !== 'eventended');

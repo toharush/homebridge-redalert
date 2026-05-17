@@ -143,9 +143,19 @@
         "minimum": 10000,
         "maximum": 600000
       },
+      "telegram_api_id": {
+        "title": "Telegram API ID",
+        "description": "Your Telegram API ID from https://my.telegram.org. Required when using Telegram sources.",
+        "type": "string"
+      },
+      "telegram_api_hash": {
+        "title": "Telegram API Hash",
+        "description": "Your Telegram API Hash from https://my.telegram.org. Required when using Telegram sources.",
+        "type": "string"
+      },
       "custom_sources": {
         "title": "Custom Alert Sources",
-        "description": "Add custom HTTP or WebSocket alert sources alongside the built-in ones.",
+        "description": "Add custom HTTP, WebSocket, or Telegram alert sources alongside the built-in ones.",
         "type": "array",
         "items": {
           "type": "object",
@@ -158,11 +168,19 @@
             "type": {
               "title": "Source Type",
               "type": "string",
-              "enum": ["http", "websocket"]
+              "enum": ["http", "websocket", "telegram"]
             },
             "url": {
               "title": "URL",
+              "description": "For HTTP/WebSocket: the endpoint URL. For Telegram: the channel URL (e.g. https://t.me/CumtaAlertsChannel).",
               "type": "string"
+            },
+            "category": {
+              "title": "Fallback Category (Telegram)",
+              "description": "Default alert category when no keyword is detected in the message header. Only used for Telegram sources.",
+              "type": "string",
+              "enum": ["rockets", "uav", "nonconventional", "warning", "earthquake", "cbrne", "terror", "tsunami", "hazmat"],
+              "default": "rockets"
             },
             "headers": {
               "title": "Headers",
@@ -259,6 +277,15 @@
         "sensors[].cities",
         "sensors[].categories",
         "sensors[].prefix_matching"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Telegram",
+      "expandable": true,
+      "items": [
+        "telegram_api_id",
+        "telegram_api_hash"
       ]
     },
     {

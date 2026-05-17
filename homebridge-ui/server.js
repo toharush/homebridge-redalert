@@ -12,6 +12,7 @@ class RedAlertUiServer extends HomebridgePluginUiServer {
     this.onRequest('/config', this.getConfig.bind(this));
     this.onRequest('/status', this.getStatus.bind(this));
     this.onRequest('/history', this.getHistory.bind(this));
+    this.onRequest('/telegram-auth', this.getTelegramAuth.bind(this));
     this.ready();
   }
 
@@ -65,6 +66,20 @@ class RedAlertUiServer extends HomebridgePluginUiServer {
       return data;
     } catch {
       return [];
+    }
+  }
+
+  async getTelegramAuth() {
+    try {
+      const authPath = path.resolve(this.homebridgeStoragePath, 'redalert-telegram-auth.json');
+      const data = JSON.parse(fs.readFileSync(authPath, 'utf-8'));
+      return data;
+    } catch {
+      const sessionPath = path.resolve(this.homebridgeStoragePath, 'redalert-telegram-session.txt');
+      if (fs.existsSync(sessionPath) && fs.readFileSync(sessionPath, 'utf-8').trim()) {
+        return { status: 'connected' };
+      }
+      return { status: 'not_configured' };
     }
   }
 }
