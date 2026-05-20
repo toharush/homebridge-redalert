@@ -27,7 +27,7 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Check if tag is on main
         id: branch-check
@@ -37,9 +37,6 @@ jobs:
           else
             echo "on_main=false" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Update npm for OIDC support
-        run: npm install -g npm@latest
 
       - name: Set version from release tag
         run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
