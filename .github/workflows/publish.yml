@@ -15,6 +15,9 @@ jobs:
   publish:
     needs: ci
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
 
     steps:
       - uses: actions/checkout@v5
@@ -52,9 +55,7 @@ jobs:
           git push origin "${GITHUB_REF_NAME}" --force
 
       - name: Publish to npm
-        run: npm publish --access public --tag latest
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --tag latest --provenance
 
       - name: Cleanup old release tags (keep last 3)
         run: |
