@@ -1,4 +1,4 @@
-name: Publish Release
+name: Publish
 
 on:
   release:
@@ -9,12 +9,12 @@ permissions:
 
 jobs:
   ci:
-    if: "!contains(github.ref_name, '-')"
     uses: ./.github/workflows/ci.yml
 
   publish:
     needs: ci
     runs-on: ubuntu-latest
+    environment: prod
     permissions:
       contents: write
       id-token: write
@@ -28,7 +28,19 @@ jobs:
         with:
           node-version: 24
 
+      - name: Determine release type
+        id: release-type
+        run: |
+          if echo "${GITHUB_REF_NAME}" | grep -q '\-'; then
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+            echo "is_stable=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "is_stable=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Check if tag is on main
+        if: steps.release-type.outputs.is_stable == 'true'
         id: branch-check
         run: |
           if git merge-base --is-ancestor "${GITHUB_SHA}" origin/main 2>/dev/null; then
@@ -43,7 +55,7 @@ jobs:
       - run: npm install
 
       - name: Commit version bump and update tag
-        if: steps.branch-check.outputs.on_main == 'true'
+        if: steps.release-type.outputs.is_stable == 'true' && steps.branch-check.outputs.on_main == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -54,15 +66,28 @@ jobs:
           git push origin "${GITHUB_REF_NAME}" --force
 
       - name: Publish to npm
-        run: npm publish --access public --tag latest --provenance
+        run: npm publish --access public --tag ${{ steps.release-type.outputs.tag }} --provenance
 
-      - name: Cleanup old release tags (keep last 3)
+      - name: Cleanup old stable tags (keep last 3)
+        if: steps.release-type.outputs.is_stable == 'true'
         run: |
           git fetch --tags --force
           STABLE_TAGS=$(git tag -l 'v*' --sort=-version:refname | grep -v '\-')
           echo "$STABLE_TAGS" | tail -n +4 | while read -r tag; do
             [ -z "$tag" ] && continue
             echo "Deleting old tag: $tag"
+            git push origin --delete "$tag" 2>/dev/null || true
+            git tag -d "$tag" 2>/dev/null || true
+          done
+
+      - name: Cleanup old beta tags (keep last 3)
+        if: steps.release-type.outputs.is_stable == 'false'
+        run: |
+          git fetch --tags --force
+          BETA_TAGS=$(git tag -l 'v*-beta*' --sort=-version:refname)
+          echo "$BETA_TAGS" | tail -n +4 | while read -r tag; do
+            [ -z "$tag" ] && continue
+            echo "Deleting old beta tag: $tag"
             git push origin --delete "$tag" 2>/dev/null || true
             git tag -d "$tag" 2>/dev/null || true
           done
