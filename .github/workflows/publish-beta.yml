@@ -27,8 +27,10 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org/
+          node-version: 22
+
+      - name: Update npm for OIDC support
+        run: npm install -g npm@latest
 
       - name: Set version from release tag
         run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
