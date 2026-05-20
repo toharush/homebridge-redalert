@@ -1,4 +1,4 @@
-import { Characteristic, PlatformAccessory, Service } from 'homebridge';
+import { Characteristic, Perms, PlatformAccessory, Service } from 'homebridge';
 import { DebugLogger } from '../utils/debugLogger';
 
 interface HomekitServices {
@@ -27,9 +27,7 @@ export class HealthCheckAccessory {
       accessory.addService(homekit.Service.Switch, 'API Health', 'health-check');
 
     this.service.getCharacteristic(this.on)
-      .onSet(() => {
-        throw new Error('Read-only');
-      });
+      .setProps({ perms: [Perms.PAIRED_READ, Perms.NOTIFY] });
 
     this.service.updateCharacteristic(this.on, true);
   }

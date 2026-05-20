@@ -1181,9 +1181,7 @@
       debug: document.getElementById("debug").checked,
     };
 
-    if (customSources.length > 0) {
-      config.custom_sources = customSources;
-    }
+    config.custom_sources = customSources;
 
     const tgApiId = document.getElementById("telegram_api_id").value.trim();
     const tgApiHash = document.getElementById("telegram_api_hash").value.trim();

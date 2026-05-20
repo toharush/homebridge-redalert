@@ -38,7 +38,7 @@ function createMockPlatformAccessory() {
     }),
   };
   const switchService = {
-    getCharacteristic: mock.fn(() => ({ onSet: mock.fn(), value: switchValue })),
+    getCharacteristic: mock.fn(() => ({ onSet: mock.fn(), setProps: mock.fn(), value: switchValue })),
     updateCharacteristic: mock.fn((_char: any, value: boolean) => {
       switchValue = value;
     }),
