@@ -609,7 +609,7 @@ describe('edge cases', () => {
     assert.strictEqual(sensor.lastState!.isActive, true);
   });
 
-  it('OrefClient throws on malformed JSON', async () => {
+  it('OrefClient returns empty array for non-JSON response', async () => {
     globalThis.fetch = mock.fn(() => Promise.resolve({
       ok: true,
       text: () => Promise.resolve('not valid json{{{'),
@@ -617,7 +617,8 @@ describe('edge cases', () => {
     })) as any;
 
     const client = new OrefClient(3000);
-    await assert.rejects(() => client.fetchAlerts());
+    const result = await client.fetchAlerts();
+    assert.deepStrictEqual(result, []);
   });
 
   it('cat as number instead of string (API inconsistency)', async () => {

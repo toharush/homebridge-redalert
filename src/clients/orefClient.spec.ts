@@ -70,9 +70,21 @@ describe('OrefClient', () => {
     assert.strictEqual(result[0].id, rocketMissilePayload.id);
   });
 
-  it('should throw on malformed JSON', async () => {
-    globalThis.fetch = mockFetch('not valid json{{{') as any;
-    await assert.rejects(() => client.fetchAlerts());
+  it('should return empty array for short non-JSON response', async () => {
+    globalThis.fetch = mockFetch('not json') as any;
+    const result = await client.fetchAlerts();
+    assert.deepStrictEqual(result, []);
+  });
+
+  it('should return empty array for empty string response', async () => {
+    globalThis.fetch = mockFetch('') as any;
+    const result = await client.fetchAlerts();
+    assert.deepStrictEqual(result, []);
+  });
+
+  it('should throw on long non-JSON response (possible truncated alert)', async () => {
+    globalThis.fetch = mockFetch('x'.repeat(50)) as any;
+    await assert.rejects(() => client.fetchAlerts(), (err: Error) => err.message.includes('Unexpected response'));
   });
 
   it('should throw on non-ok HTTP status', async () => {
