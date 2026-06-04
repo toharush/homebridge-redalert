@@ -28,7 +28,16 @@ export class OrefClient implements AlertClient {
       return [];
     }
 
-    const parsed = JSON.parse(cleaned);
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      if (cleaned.length < 20) {
+        return [];
+      }
+      throw new Error(`Unexpected response (${cleaned.length} bytes)`);
+    }
+
     const alerts: OrefRealtimeAlert[] = _.isArray(parsed) ? parsed : [parsed];
     return _.map(
       alerts,
