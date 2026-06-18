@@ -17,6 +17,8 @@ export class AlertPipeline {
   private readonly stages: PipelineStage[] = [];
   private readonly listeners: AlertListener[] = [];
   private dedupStage: DeduplicationStage;
+  private expiryStage: ExpiryStage | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   private healthCallback: ((status: SourceStatus[]) => void) | null = null;
   private lastHealthy = true;
@@ -45,6 +47,10 @@ export class AlertPipeline {
       this.stages.push(stage);
     } else if (stage instanceof ExpiryStage) {
       stage.attachSeen(this.dedupStage.seen);
+      // Dedup shares its `seen` map with ExpiryStage. Ensure dedup retains
+      // entries long enough for expiry to act on them before cleanup purges.
+      this.dedupStage.setMinRetention(stage.maxAgeMs);
+      this.expiryStage = stage;
       const dedupIdx = this.stages.indexOf(this.dedupStage);
       this.stages.splice(dedupIdx, 0, stage);
     } else {
@@ -74,12 +80,34 @@ export class AlertPipeline {
       this.sources[i].start();
     }
     this.lastHealthSnapshot = this.getSourceStatus().map((s) => s.healthy ? '1' : '0').join('');
+    this.startExpiryHeartbeat();
   }
 
   stop(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
     for (let i = 0; i < this.sources.length; i++) {
       this.sources[i].stop();
     }
+  }
+
+  /**
+   * Drives ExpiryStage on its own timer instead of relying on source traffic.
+   * A source that errors never delivers a callback (HttpSource only fires on
+   * success), so without this the expiry safety-net would freeze during the
+   * exact outage it exists to cover. Self-ingesting an empty batch runs the
+   * stage chain — ExpiryStage emits any synthetic Event-Ended, which then flows
+   * through dedup to the listeners just like a real one.
+   */
+  private startExpiryHeartbeat(): void {
+    if (!this.expiryStage || this.heartbeatTimer) {
+      return;
+    }
+    const timer = setInterval(() => this.ingest('expiry-heartbeat', []), this.expiryStage.scanIntervalMs);
+    timer.unref?.();
+    this.heartbeatTimer = timer;
   }
 
   isHealthy(): boolean {

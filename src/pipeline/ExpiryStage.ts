@@ -3,8 +3,8 @@ import { PipelineStage } from './PipelineStage';
 import crypto from 'crypto';
 
 export class ExpiryStage implements PipelineStage {
-  private readonly maxAgeMs: number;
-  private readonly scanIntervalMs: number;
+  readonly maxAgeMs: number;
+  readonly scanIntervalMs: number;
   private lastExpiryScan = 0;
   private seenRef: Map<string, Map<string, number>> | null = null;
 
