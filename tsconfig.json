@@ -24,6 +24,7 @@
   "exclude": [
     "**/*.spec.ts",
     "**/*.mock.ts",
-    "**/*.mock.json"
+    "**/*.mock.json",
+    "**/benchmark.ts"
   ]
 }

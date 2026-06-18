@@ -8,11 +8,26 @@ export class DeduplicationStage implements PipelineStage {
   private readonly windowMs: number;
   private readonly history: AlertHistory | null;
   private lastCleanup = 0;
+  private cleanupRetentionMs: number;
   private _parsed: ParsedAlerts | null = null;
 
   constructor(windowMs: number = 30000, _log?: unknown, history?: AlertHistory) {
     this.windowMs = windowMs;
     this.history = history ?? null;
+    this.cleanupRetentionMs = windowMs * 2;
+  }
+
+  /**
+   * Raises the floor on how long `seen` entries are retained before cleanup
+   * purges them. A downstream consumer that shares this map (e.g. ExpiryStage)
+   * needs entries to outlive the dedup window, otherwise cleanup deletes the
+   * entries it depends on before it can act on them. Dedup's pass/drop logic is
+   * unaffected — it always compares against the `windowMs` cutoff.
+   */
+  setMinRetention(ms: number): void {
+    if (ms > this.cleanupRetentionMs) {
+      this.cleanupRetentionMs = ms;
+    }
   }
 
   get parsed(): ParsedAlerts | null {
@@ -28,8 +43,8 @@ export class DeduplicationStage implements PipelineStage {
     const now = Date.now();
     const cutoff = now - this.windowMs;
 
-    if (now - this.lastCleanup > this.windowMs * 2) {
-      this.cleanup(now - this.windowMs * 2);
+    if (now - this.lastCleanup > this.cleanupRetentionMs) {
+      this.cleanup(now - this.cleanupRetentionMs);
       this.lastCleanup = now;
     }
 

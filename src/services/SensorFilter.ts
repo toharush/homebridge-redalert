@@ -80,6 +80,15 @@ export class SensorFilter implements AlertListener {
     const nationwideEnd = endedCities.has(NATIONWIDE_CITY);
     const nationwideAlert = this.findNationwideAlert(relevantCities);
 
+    // Fast path: the common case (no prefix matching, no nationwide event).
+    // Iterate the alert cities — usually a handful — and probe citySet, instead
+    // of scanning every configured city. For a sensor monitoring many cities
+    // hit by a small batch, this is O(alertCities) instead of O(configured).
+    if (!this.prefixMatching && !nationwideEnd && !nationwideAlert) {
+      this.handleScoped(endedCities, relevantCities);
+      return;
+    }
+
     if (this.hasBroadcast && !nationwideEnd && !nationwideAlert && !this.prefixMatching && this.activeCities.size === 0) {
       let hasRelevant = false;
       for (const alertCity of relevantCities.keys()) {
@@ -109,6 +118,40 @@ export class SensorFilter implements AlertListener {
           this.log.info(`[${this.name}] ALERT: ${title} - ${configured}`);
           this.webhook?.fire({
             event: 'alert', sensor: this.name, city: configured, title, timestamp: Date.now(),
+          });
+        }
+      }
+    }
+
+    this.broadcastState();
+  }
+
+  private handleScoped(endedCities: Set<string>, relevantCities: Map<string, CityAlert[]>): void {
+    // Event-ended: walk the (small) ended set, not the whole configured set.
+    if (endedCities.size > 0) {
+      for (const city of endedCities) {
+        if (this.citySet.has(city) && this.activeCities.delete(city)) {
+          this.log.info(`[${this.name}] Event ended: ${city}`);
+          this.webhook?.fire({
+            event: 'ended', sensor: this.name, city, title: 'Event Ended', timestamp: Date.now(),
+          });
+        }
+      }
+    }
+
+    // Alerts: walk the (small) alert set, probing the configured set.
+    for (const [city, entries] of relevantCities) {
+      if (!this.citySet.has(city)) {
+        continue;
+      }
+      const title = this.tryMatchCategory(entries);
+      if (title) {
+        const isNew = !this.activeCities.has(city);
+        this.activeCities.set(city, Date.now());
+        if (isNew) {
+          this.log.info(`[${this.name}] ALERT: ${title} - ${city}`);
+          this.webhook?.fire({
+            event: 'alert', sensor: this.name, city, title, timestamp: Date.now(),
           });
         }
       }
