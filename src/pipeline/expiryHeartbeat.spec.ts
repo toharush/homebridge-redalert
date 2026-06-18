@@ -31,10 +31,16 @@ class OneShotSource implements AlertSource {
   readonly type = 'http' as const;
   private cb: ((alerts: OrefRealtimeAlert[]) => void) | null = null;
   constructor(private readonly alert: OrefRealtimeAlert) {}
-  onAlerts(cb: (alerts: OrefRealtimeAlert[]) => void): void { this.cb = cb; }
+  onAlerts(cb: (alerts: OrefRealtimeAlert[]) => void): void {
+    this.cb = cb;
+  }
   onHealthChange(): void {}
-  isHealthy(): boolean { return false; }
-  start(): void { this.cb?.([this.alert]); }
+  isHealthy(): boolean {
+    return false;
+  }
+  start(): void {
+    this.cb?.([this.alert]);
+  }
   stop(): void {}
 }
 
