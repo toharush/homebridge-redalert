@@ -736,6 +736,20 @@
   letter-spacing: 0.5px;
 }
 
+/* Poll rate, for sources that are deliberately polled slower than the global
+   interval because the upstream host rate-limits. Neutral grey: it is
+   information about the source, not a warning about it. */
+.marketplace-rate-badge {
+  font-size: 0.65em;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #6b7280;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
 /* Alert History */
 .history-panel {
   max-height: 0;

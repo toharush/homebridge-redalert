@@ -17,6 +17,13 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    // Without this, tsc implicitly includes every @types package it finds by
+    // walking node_modules upwards, so an unrelated node_modules in a parent
+    // directory breaks the build with errors about type libraries this project
+    // never references. Listing the types explicitly keeps the build hermetic.
+    "types": [
+      "node"
+    ],
   },
   "include": [
     "src/"
