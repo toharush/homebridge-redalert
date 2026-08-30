@@ -24,6 +24,7 @@ export class HttpSource implements AlertSource {
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private consecutiveFailures = 0;
   private healthy = true;
+  private outageStartedAt = 0;
   private abortController: AbortController | null = null;
   private currentTimeout: number;
 
@@ -131,8 +132,14 @@ export class HttpSource implements AlertSource {
 
   private onSuccess(): void {
     if (!this.healthy) {
+      const downForMs = this.outageStartedAt ? Date.now() - this.outageStartedAt : 0;
+      this.log.info(
+        `[${this.name}] Recovered after ${this.consecutiveFailures} consecutive failures `
+        + `(down ${(downForMs / 1000).toFixed(1)}s)`,
+      );
       this.healthy = true;
       this.consecutiveFailures = 0;
+      this.outageStartedAt = 0;
       this.healthCallback?.(true);
     } else if (this.consecutiveFailures > 0) {
       this.consecutiveFailures = 0;
@@ -144,13 +151,33 @@ export class HttpSource implements AlertSource {
 
   private onFailure(err: Error, elapsed: number): void {
     this.consecutiveFailures++;
-    if (this.config.adaptiveTimeout && this.consecutiveFailures === 1) {
-      this.currentTimeout = this.retryTimeout;
+    if (this.consecutiveFailures === 1) {
+      this.outageStartedAt = Date.now();
+      if (this.config.adaptiveTimeout) {
+        this.currentTimeout = this.retryTimeout;
+      }
     }
-    if (this.healthy && this.consecutiveFailures >= this.config.failureThreshold) {
+
+    const crossedThreshold = this.healthy && this.consecutiveFailures >= this.config.failureThreshold;
+    if (crossedThreshold) {
       this.healthy = false;
       this.healthCallback?.(false);
     }
-    this.log.error(`[${this.name}] Failed to fetch (${elapsed}ms): ${err}`);
+
+    let level: 'error' | 'warn' | 'debug' = 'debug';
+    if (crossedThreshold) {
+      level = 'error';
+    } else if (this.healthy && this.consecutiveFailures > 1) {
+      level = 'warn';
+    }
+
+    const parts = [`[${this.name}] Failed to fetch (${elapsed}ms): ${err.message}`];
+    if (level !== 'debug') {
+      parts.push(` [failure ${this.consecutiveFailures}/${this.config.failureThreshold}]`);
+    }
+    if (crossedThreshold) {
+      parts.push(' — source marked unhealthy');
+    }
+    this.log[level](parts.join(''));
   }
 }

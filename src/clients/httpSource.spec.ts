@@ -133,6 +133,84 @@ describe('HttpSource', () => {
     assert.deepStrictEqual(healthEvents, [false, true]);
   });
 
+  it('logs an isolated failure at debug, not error', async () => {
+    let callCount = 0;
+    const fetchFn = mock.fn(() => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.reject(new Error('blip'));
+      }
+      return Promise.resolve([] as OrefRealtimeAlert[]);
+    });
+    const log = createLogger();
+    const source = new HttpSource(log, {
+      name: 'test',
+      url: '',
+      pollingInterval: 10,
+      requestTimeout: 3000,
+      failureThreshold: 5,
+      fetchFn,
+    });
+
+    source.onAlerts(() => {});
+    source.start();
+    await new Promise((r) => setTimeout(r, 60));
+    source.stop();
+
+    assert.strictEqual(log.error.mock.calls.length, 0);
+    assert.strictEqual(log.warn.mock.calls.length, 0);
+    assert.ok(log.debug.mock.calls.some((c: any) => c.arguments[0].includes('Failed to fetch')));
+  });
+
+  it('escalates to warn before the threshold and errors once on the flip to unhealthy', async () => {
+    const fetchFn = mock.fn(() => Promise.reject(new Error('fail')));
+    const log = createLogger();
+    const source = new HttpSource(log, {
+      name: 'test',
+      url: '',
+      pollingInterval: 10,
+      requestTimeout: 3000,
+      failureThreshold: 3,
+      fetchFn,
+    });
+
+    source.start();
+    await new Promise((r) => setTimeout(r, 200));
+    source.stop();
+
+    // Failure 1 -> debug, failure 2 -> warn, failure 3 -> single error, rest -> debug.
+    assert.strictEqual(log.error.mock.calls.length, 1);
+    assert.ok(log.error.mock.calls[0].arguments[0].includes('source marked unhealthy'));
+    assert.ok(log.warn.mock.calls.some((c: any) => c.arguments[0].includes('failure 2/3')));
+  });
+
+  it('logs recovery at info with the outage summary', async () => {
+    let callCount = 0;
+    const fetchFn = mock.fn(() => {
+      callCount++;
+      if (callCount <= 3) {
+        return Promise.reject(new Error('fail'));
+      }
+      return Promise.resolve([] as OrefRealtimeAlert[]);
+    });
+    const log = createLogger();
+    const source = new HttpSource(log, {
+      name: 'test',
+      url: '',
+      pollingInterval: 10,
+      requestTimeout: 3000,
+      failureThreshold: 3,
+      fetchFn,
+    });
+
+    source.onAlerts(() => {});
+    source.start();
+    await new Promise((r) => setTimeout(r, 200));
+    source.stop();
+
+    assert.ok(log.info.mock.calls.some((c: any) => c.arguments[0].includes('Recovered after 3 consecutive failures')));
+  });
+
   it('adaptive timeout reduces timeout on first failure', async () => {
     let callCount = 0;
     const fetchFn = mock.fn(() => {
