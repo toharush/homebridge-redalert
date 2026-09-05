@@ -122,7 +122,7 @@ export async function createSharedTelegramClient(
     const eventsModule = await import('telegram/events/index.js');
     NewMessage = eventsModule.NewMessage;
 
-    const editedModule = await import('telegram/events/EditedMessage');
+    const editedModule = await import('telegram/events/EditedMessage.js');
     EditedMessage = editedModule.EditedMessage;
   } catch (err) {
     log.error(`Failed to import telegram package: ${err}`);

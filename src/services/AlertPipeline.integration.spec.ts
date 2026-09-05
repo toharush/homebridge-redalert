@@ -826,9 +826,13 @@ describe('pipeline async polling', () => {
     const client = new OrefClient(3000);
     const log = createMockLogger();
     const pipeline = new AlertPipeline(log);
+    // failureThreshold 1 so the first failed poll crosses the threshold and logs
+    // at error level. HttpSource only escalates to error on the flip to unhealthy;
+    // with the default threshold of 5, the two polls that fit in 50ms would log at
+    // debug and warn, making the assertion timing-dependent.
     pipeline.addSource(new HttpSource(log, {
       name: 'test', url: '', pollingInterval: 30, requestTimeout: 3000,
-      failureThreshold: DEFAULT_HEALTH_CHECK_THRESHOLD, fetchFn: () => client.fetchAlerts(),
+      failureThreshold: 1, fetchFn: () => client.fetchAlerts(),
     }));
     const sensor = createMockAccessory();
     pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), false));
@@ -846,9 +850,10 @@ describe('pipeline async polling', () => {
     const client = new OrefClient(3000);
     const log = createMockLogger();
     const pipeline = new AlertPipeline(log);
+    // failureThreshold 1 for the same reason as the AbortError test above.
     pipeline.addSource(new HttpSource(log, {
       name: 'test', url: '', pollingInterval: 30, requestTimeout: 3000,
-      failureThreshold: DEFAULT_HEALTH_CHECK_THRESHOLD, fetchFn: () => client.fetchAlerts(),
+      failureThreshold: 1, fetchFn: () => client.fetchAlerts(),
     }));
     const sensor = createMockAccessory();
     pipeline.subscribe(new SensorFilter('Test', log, sensor, ['תל אביב'], allCategoryIds(), false));

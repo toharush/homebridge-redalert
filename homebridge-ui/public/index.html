@@ -1,14 +1,19 @@
-<link
-  rel="stylesheet"
-  href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css"
-/>
-<link
-  rel="stylesheet"
-  href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"
-/>
+<!--
+  Vendored locally rather than loaded from a CDN. homebridge-config-ui-x serves
+  plugin custom UIs under a `default-src 'self'` Content-Security-Policy as of
+  v5.25.0, which blocks third-party origins. Its `customUiCspDomains` escape
+  hatch is appended to `script-src` and `frame-src` only, not `style-src`, so
+  the stylesheets below could not be allowed that way. Same-origin also removes
+  the runtime dependency on a third party, which matters for a plugin whose job
+  is to work during infrastructure disruption. See issue #46.
+
+  Versions: tom-select 2.4.3, leaflet 1.9.4.
+-->
+<link rel="stylesheet" href="vendor/tom-select.bootstrap5.min.css" />
+<link rel="stylesheet" href="vendor/leaflet.min.css" />
 <link rel="stylesheet" href="style.css" />
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
+<script src="vendor/tom-select.complete.min.js"></script>
+<script src="vendor/leaflet.min.js"></script>
 
 <div id="app">
   <div class="disclaimer-box">
@@ -173,9 +178,9 @@
     <div class="marketplace-card" onclick="addMarketplaceSource('mako')">
       <div class="marketplace-header">
         <span class="marketplace-name">Mako</span>
-        <div class="marketplace-badges"><span class="source-badge">HTTP</span><span class="marketplace-beta-badge">Beta</span></div>
+        <div class="marketplace-badges"><span class="source-badge">HTTP</span><span class="marketplace-beta-badge">Beta</span><span class="marketplace-rate-badge">30s poll</span></div>
       </div>
-      <div class="marketplace-desc">Mako/N12 news mirror of Pikud HaOref. Identical format to official API. No geo-restriction.</div>
+      <div class="marketplace-desc">Mako/N12 news mirror of Pikud HaOref. Identical format to official API. No geo-restriction. Rate-limited upstream, so it is polled every 30s rather than every second &mdash; polling faster gets your IP blocked.</div>
       <div class="marketplace-url">mako.co.il</div>
     </div>
     <div class="marketplace-card" onclick="addMarketplaceSource('prog')">
@@ -439,18 +444,41 @@
 
   async function init() {
     homebridge.showSpinner();
+    // Everything below runs inside try/finally so the spinner is always cleared.
+    // Previously a throw anywhere in this function left the modal showing a
+    // spinner forever with no error surfaced to the user (issue #46).
+    try {
+      await initBody();
+    } catch (e) {
+      homebridge.toast.error(
+        `Failed to load settings: ${(e && e.message) || e}`,
+      );
+    } finally {
+      initializing = false;
+      homebridge.hideSpinner();
+    }
+  }
+
+  async function initBody() {
     try {
       cities = await homebridge.request("/cities");
-    } catch (e) {
+    } catch {
       cities = [];
       homebridge.toast.error("Failed to load cities list");
     }
 
-    let config;
+    let config = {};
     try {
       config = (await homebridge.request("/config")) || {};
     } catch {
-      config = (await homebridge.getPluginConfig())[0] || {};
+      // Guarded separately: this fallback is itself an await, so an unguarded
+      // failure here produced an unhandled rejection rather than a message.
+      try {
+        config = (await homebridge.getPluginConfig())[0] || {};
+      } catch {
+        config = {};
+        homebridge.toast.error("Failed to load plugin configuration");
+      }
     }
     sensors = config.sensors || [];
     addonSources = config.custom_sources || [];
@@ -484,8 +512,6 @@
 
     sensors.forEach((s, i) => renderSensor(s, i));
     updateBuiltinCards();
-    initializing = false;
-    homebridge.hideSpinner();
   }
 
   // --- Addon Sources ---
@@ -497,6 +523,13 @@
     card.id = `addon-source-${id}`;
     if (source.response_format) {
       card.dataset.responseFormat = JSON.stringify(source.response_format);
+    }
+    // Carried on the dataset rather than rendered as an input, the same way
+    // response_format is above. collectAddonSources() rebuilds each source from
+    // the card's fields, so anything without either a field or a dataset entry
+    // is dropped on the next save.
+    if (source.polling_interval) {
+      card.dataset.pollingInterval = String(source.polling_interval);
     }
 
     const displayName = source.name || "Custom Source";
@@ -625,6 +658,14 @@
     mako: {
       name: "Mako",
       type: "http",
+      // Polled far slower than the 1s global default. This endpoint sits behind
+      // Radware bot management (responses carry an `rdwr_response` header), and
+      // polling once a second from a single address gets that address dropped —
+      // the requests then fail at the connection level, so they surface as
+      // `fetch failed` / `AbortError` with no HTTP status. See issue #45.
+      // Mako is a redundant mirror of Pikud HaOref, which is polled at the full
+      // rate, so a slower interval here costs no meaningful alert latency.
+      polling_interval: 30000,
       url: "https://www.mako.co.il/Collab/amudanan/alerts.json",
       category_mapping: { "1": "rockets", "2": "nonconventional", "3": "earthquake", "4": "cbrne", "5": "tsunami", "6": "uav", "7": "hazmat", "8": "warning", "10": "warning", "13": "terror" },
     },
@@ -945,6 +986,11 @@
 
       if (card.dataset.responseFormat) {
         try { source.response_format = JSON.parse(card.dataset.responseFormat); } catch {}
+      }
+
+      if (card.dataset.pollingInterval) {
+        const interval = parseInt(card.dataset.pollingInterval, 10);
+        if (interval > 0) source.polling_interval = interval;
       }
 
       sources.push(source);

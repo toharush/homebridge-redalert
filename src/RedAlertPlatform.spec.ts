@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { Service, Characteristic, uuid } from 'hap-nodejs';
+import { Service, Characteristic, uuid } from '@homebridge/hap-nodejs';
 import { RedAlertPlatform } from './RedAlertPlatform';
 import { PLATFORM_NAME } from './settings';
 

@@ -1,7 +1,14 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
+    // homebridge 2.x and its @matter/* dependencies publish their types behind
+    // package.json "exports" maps and Node "imports" (#-prefixed) subpaths.
+    // Classic "node" resolution cannot read either, so it fails to find those
+    // declarations. "nodenext" reads both and matches the Node versions
+    // homebridge 2 supports. The plugin still emits CommonJS because this
+    // package.json has no "type": "module".
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "lib": [
       "DOM",
       "ES2022"
@@ -17,6 +24,13 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    // Without this, tsc implicitly includes every @types package it finds by
+    // walking node_modules upwards, so an unrelated node_modules in a parent
+    // directory breaks the build with errors about type libraries this project
+    // never references. Listing the types explicitly keeps the build hermetic.
+    "types": [
+      "node"
+    ],
   },
   "include": [
     "src/"
