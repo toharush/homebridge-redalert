@@ -110,7 +110,11 @@ describe('BUG #2: OrefClient should throw on HTTP errors', () => {
   it('should throw on malformed JSON', async () => {
     globalThis.fetch = mock.fn(() => Promise.resolve({
       ok: true, status: 200,
-      text: () => Promise.resolve('not valid json{{{'),
+      // Must exceed 20 bytes: OrefClient deliberately treats shorter unparseable
+      // bodies as "no alerts" and returns [], because OREF answers with tiny
+      // non-JSON junk when nothing is active. Only long garbage means a real
+      // problem (e.g. a truncated payload) and throws.
+      text: () => Promise.resolve('not valid json{{{ and long enough to be a truncated payload'),
     })) as any;
 
     const client = new OrefClient(3000);

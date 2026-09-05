@@ -1,7 +1,14 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
+    // homebridge 2.x and its @matter/* dependencies publish their types behind
+    // package.json "exports" maps and Node "imports" (#-prefixed) subpaths.
+    // Classic "node" resolution cannot read either, so it fails to find those
+    // declarations. "nodenext" reads both and matches the Node versions
+    // homebridge 2 supports. The plugin still emits CommonJS because this
+    // package.json has no "type": "module".
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "lib": [
       "DOM",
       "ES2022"

@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: https://registry.npmjs.org/
 
       - run: npm install
@@ -35,16 +35,16 @@ jobs:
             git push
           fi
 
-  build-node-20:
-    needs: [update-lockfile]
-    if: always()
-    uses: ./.github/workflows/ci.yml
-    with:
-      node-version: '20'
-
   build-node-22:
     needs: [update-lockfile]
     if: always()
     uses: ./.github/workflows/ci.yml
     with:
       node-version: '22'
+
+  build-node-24:
+    needs: [update-lockfile]
+    if: always()
+    uses: ./.github/workflows/ci.yml
+    with:
+      node-version: '24'
