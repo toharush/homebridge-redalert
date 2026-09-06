@@ -100,8 +100,9 @@ export class TelegramSource implements AlertSource {
 }
 
 /**
- * Creates a SharedTelegramClient using the `telegram` npm package.
- * Uses dynamic import so compilation doesn't fail if the package isn't installed.
+ * Creates a SharedTelegramClient using the `teleproto` npm package
+ * (maintained GramJS fork). Uses dynamic import so compilation doesn't fail
+ * if the package isn't installed.
  */
 export async function createSharedTelegramClient(
   log: DebugLogger,
@@ -115,18 +116,18 @@ export async function createSharedTelegramClient(
   let EditedMessage: any;
 
   try {
-    const telegramModule = await import('telegram');
+    const telegramModule = await import('teleproto');
     TelegramClientClass = telegramModule.TelegramClient;
     StringSession = telegramModule.sessions.StringSession;
 
-    const eventsModule = await import('telegram/events/index.js');
+    const eventsModule = await import('teleproto/events/index.js');
     NewMessage = eventsModule.NewMessage;
 
-    const editedModule = await import('telegram/events/EditedMessage.js');
+    const editedModule = await import('teleproto/events/EditedMessage.js');
     EditedMessage = editedModule.EditedMessage;
   } catch (err) {
-    log.error(`Failed to import telegram package: ${err}`);
-    throw new Error('telegram package is not installed. Install it with: npm install telegram');
+    log.error(`Failed to import teleproto package: ${err}`);
+    throw new Error('teleproto package is not installed. Install it with: npm install teleproto');
   }
 
   // Load session from file if it exists

@@ -15,8 +15,8 @@
   <a href="https://github.com/toharush/homebridge-redalert/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@toharush/homebridge-redalert.svg" alt="license"></a>
   <br>
   <a href="https://github.com/homebridge/homebridge/wiki/Verified-Plugins"><img src="https://img.shields.io/badge/homebridge-verified-blueviolet?color=%23491F59&style=flat" alt="verified by homebridge"></a>
-  <img src="https://img.shields.io/node/v/@toharush/homebridge-redalert.svg" alt="node version">
-  <img src="https://img.shields.io/badge/homebridge-%3E%3D1.6.0-blueviolet.svg" alt="homebridge version">
+  <img src="https://img.shields.io/badge/node-%5E22%20%7C%7C%20%5E24%20%7C%7C%20%5E25-%23a4a61d.svg" alt="node version">
+  <img src="https://img.shields.io/badge/homebridge-%5E1.6.0%20%7C%7C%20%5E2.0.0-blueviolet.svg" alt="homebridge version">
   <img src="https://img.shields.io/npm/last-update/@toharush/homebridge-redalert.svg" alt="last updated">
   <a href="https://github.com/toharush/homebridge-redalert/graphs/contributors"><img src="https://img.shields.io/github/contributors/toharush/homebridge-redalert.svg" alt="contributors"></a>
   <a href="https://github.com/toharush/homebridge-redalert"><img src="https://img.shields.io/github/stars/toharush/homebridge-redalert.svg?style=social" alt="GitHub stars"></a>
