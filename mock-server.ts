@@ -3,8 +3,12 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { MockAlertFeed, MOCK_CATEGORIES, DeliveryMode } from './src/mock/MockAlertFeed.mock';
 
-const PORT = 3100;
+const PORT = Number(process.env.MOCK_PORT) || 3100;
+// How long /alerts keeps listing a city in the "event ended" entry after it ends,
+// so HTTP pollers (even slow ones) see the all-clear, as they would from Oref.
+const ENDED_TTL_MS = Number(process.env.MOCK_ENDED_TTL_MS) || 60000;
 
 function getLanIp(): string {
   const interfaces = os.networkInterfaces();
@@ -25,17 +29,47 @@ const cities: { name: string; area: string }[] = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'src/data/cities.json'), 'utf-8'),
 );
 
-const CATEGORIES: Record<string, { threat: number; orefCat: number; title: string; emoji: string }> = {
-  rockets:          { threat: 0, orefCat: 1, title: 'ירי רקטות וטילים', emoji: '🚀' },
-  uav:             { threat: 5, orefCat: 6, title: 'חדירת כלי טיס עוין', emoji: '✈️' },
-  terror:          { threat: 2, orefCat: 13, title: 'חדירת מחבלים', emoji: '⚠️' },
-  nonconventional: { threat: 7, orefCat: 2, title: 'איום כימי', emoji: '☣️' },
-  eventended:      { threat: 99, orefCat: 99, title: 'האירוע הסתיים', emoji: '✓' },
-};
-
 const wsClients = new Set<WebSocket>();
-type DeliveryMode = 'both' | 'http' | 'ws';
-let activeAlert: { cities: string[]; category: string; mode: DeliveryMode; timeout: ReturnType<typeof setTimeout> } | null = null;
+
+function broadcast(message: unknown) {
+  const data = JSON.stringify(message);
+  for (const ws of wsClients) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(data);
+    }
+  }
+}
+
+// Per-city state: firing a city never drops the cities already active, and
+// ending a city only ends that city (see src/mock/MockAlertFeed.mock.ts).
+const feed = new MockAlertFeed({ endedTtlMs: ENDED_TTL_MS, broadcast });
+
+function summary(list: string[]): string {
+  return `${list.slice(0, 5).join(', ')}${list.length > 5 ? ` +${list.length - 5} more` : ''}`;
+}
+
+function readJson(req: http.IncomingMessage): Promise<any> {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      if (!body.trim()) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(body));
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+}
+
+function sendJson(res: http.ServerResponse, status: number, body: unknown) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(body));
+}
 
 const server = http.createServer((req, res) => {
   if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
@@ -45,70 +79,55 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === 'GET' && req.url === '/alerts') {
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    if (!activeAlert || activeAlert.mode === 'ws') {
-      res.end('[]');
-      return;
-    }
-    const cat = CATEGORIES[activeAlert.category];
-    const orefAlert = [{
-      id: 'mock-' + Date.now(),
-      cat: String(cat?.orefCat ?? 1),
-      title: cat?.title ?? '',
-      data: activeAlert.cities,
-      desc: '',
-    }];
-    res.end(JSON.stringify(orefAlert));
+    sendJson(res, 200, feed.alerts());
     return;
   }
 
   if (req.method === 'GET' && req.url === '/api/cities') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(cities));
+    sendJson(res, 200, cities);
     return;
   }
 
   if (req.method === 'POST' && req.url === '/api/fire') {
-    let body = '';
-    req.on('data', (chunk) => (body += chunk));
-    req.on('end', () => {
-      try {
-        const { cities: cityNames, category, duration, mode } = JSON.parse(body);
-        if (!cityNames || !cityNames.length) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'No cities provided' }));
-          return;
-        }
-        const deliveryMode: DeliveryMode = (mode === 'http' || mode === 'ws') ? mode : 'both';
-        fireAlert(cityNames, category || 'rockets', (duration || 30) * 1000, deliveryMode);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, cities: cityNames, category, mode: deliveryMode }));
-      } catch {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Invalid JSON' }));
+    readJson(req).then(({ cities: cityNames, category, duration, mode }) => {
+      const deliveryMode: DeliveryMode = (mode === 'http' || mode === 'ws') ? mode : 'both';
+      const categoryKey = category || 'rockets';
+      const result = feed.fire(cityNames, categoryKey, (duration || 30) * 1000, deliveryMode);
+      if (!result.ok) {
+        sendJson(res, 400, { error: result.error });
+        return;
       }
-    });
+      const modeLabel = deliveryMode === 'both' ? 'HTTP+WS' : deliveryMode.toUpperCase();
+      if (result.ended) {
+        console.log(`  ✓ [${modeLabel}] Event ended: ${summary(result.ended)}\n`);
+      } else {
+        console.log(`\n  🚨 ALERT [${modeLabel}]: ${MOCK_CATEGORIES[categoryKey].title}`);
+        console.log(`  Cities (${result.cities.length}): ${summary(result.cities)}`);
+        console.log(`  Duration: ${duration || 30}s  (active now: ${feed.status()?.cities.length ?? 0})\n`);
+      }
+      sendJson(res, 200, { ok: true, cities: result.cities, category: categoryKey, mode: deliveryMode });
+    }, () => sendJson(res, 400, { error: 'Invalid JSON' }));
     return;
   }
 
+  // Body (optional): { cities: [...] } ends only those cities; no body ends every active city.
   if (req.method === 'POST' && req.url === '/api/end') {
-    if (activeAlert) {
-      endAlert(activeAlert.cities, activeAlert.mode);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
-    } else {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'No active alert' }));
-    }
+    readJson(req).then(({ cities: cityNames, mode }) => {
+      const only = Array.isArray(cityNames) && cityNames.length > 0;
+      if (!only && !feed.status()) {
+        sendJson(res, 400, { error: 'No active alert' });
+        return;
+      }
+      const deliveryMode: DeliveryMode = (mode === 'http' || mode === 'ws') ? mode : 'both';
+      const ended = feed.end(only ? cityNames : undefined, deliveryMode);
+      console.log(`  ✓ Event ended: ${summary(ended)}  (still active: ${feed.status()?.cities.length ?? 0})\n`);
+      sendJson(res, 200, { ok: true, ended });
+    }, () => sendJson(res, 400, { error: 'Invalid JSON' }));
     return;
   }
 
   if (req.method === 'GET' && req.url === '/api/status') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      active: activeAlert ? { cities: activeAlert.cities, category: activeAlert.category } : null,
-      clients: wsClients.size,
-    }));
+    sendJson(res, 200, { active: feed.status(), clients: wsClients.size });
     return;
   }
 
@@ -127,62 +146,6 @@ wss.on('connection', (ws) => {
   });
   ws.on('ping', () => ws.pong());
 });
-
-function broadcast(message: unknown) {
-  const data = JSON.stringify(message);
-  for (const ws of wsClients) {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(data);
-    }
-  }
-}
-
-function fireAlert(cityNames: string[], categoryKey: string, durationMs: number, mode: DeliveryMode = 'both') {
-  const category = CATEGORIES[categoryKey];
-  if (!category) {
-    console.log(`  Unknown category: ${categoryKey}`);
-    return;
-  }
-
-  if (activeAlert) {
-    clearTimeout(activeAlert.timeout);
-  }
-
-  const timeout = setTimeout(() => endAlert(cityNames, mode), durationMs);
-  activeAlert = { cities: cityNames, category: categoryKey, mode, timeout };
-
-  if (mode === 'ws' || mode === 'both') {
-    broadcast([{
-      id: 'mock-ws-' + Date.now(),
-      cat: String(category.orefCat),
-      title: category.title,
-      data: cityNames,
-      desc: '',
-    }]);
-  }
-
-  const modeLabel = mode === 'both' ? 'HTTP+WS' : mode.toUpperCase();
-  console.log(`\n  🚨 ALERT [${modeLabel}]: ${category.title}`);
-  console.log(`  Cities (${cityNames.length}): ${cityNames.slice(0, 5).join(', ')}${cityNames.length > 5 ? ` +${cityNames.length - 5} more` : ''}`);
-  console.log(`  Duration: ${durationMs / 1000}s\n`);
-}
-
-function endAlert(cityNames: string[], mode: DeliveryMode = 'both') {
-  activeAlert = null;
-
-  if (mode === 'ws' || mode === 'both') {
-    broadcast([{
-      id: 'mock-ws-end-' + Date.now(),
-      cat: '99',
-      title: 'האירוע הסתיים',
-      data: cityNames,
-      desc: '',
-    }]);
-  }
-
-  const modeLabel = mode === 'both' ? 'HTTP+WS' : mode.toUpperCase();
-  console.log(`  ✓ [${modeLabel}] Event ended: ${cityNames.slice(0, 5).join(', ')}${cityNames.length > 5 ? ` +${cityNames.length - 5} more` : ''}\n`);
-}
 
 function getHtml(): string {
   return `<!DOCTYPE html>
@@ -353,7 +316,8 @@ function getHtml(): string {
   </div>
 
   <button id="fireBtn" class="btn btn-fire" disabled>Fire Alert</button>
-  <button id="endBtn" class="btn btn-end">End Alert</button>
+  <button id="endSelBtn" class="btn btn-end" disabled>End Selected Cities</button>
+  <button id="endBtn" class="btn btn-end">End All Alerts</button>
 </div>
 
 <script>
@@ -365,6 +329,7 @@ function getHtml(): string {
   const selectedEl = document.getElementById('selectedCities');
   const fireBtn = document.getElementById('fireBtn');
   const endBtn = document.getElementById('endBtn');
+  const endSelBtn = document.getElementById('endSelBtn');
   const statusBar = document.getElementById('statusBar');
   const wsCount = document.getElementById('wsCount');
 
@@ -412,6 +377,7 @@ function getHtml(): string {
       '<span class="chip">' + escHtml(c) + '<button onclick="removeCity(\\''+escJs(c)+'\\')">\\u00d7</button></span>'
     ).join('');
     fireBtn.disabled = selected.length === 0;
+    endSelBtn.disabled = selected.length === 0;
   }
 
   function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -433,6 +399,13 @@ function getHtml(): string {
     pollStatus();
   });
 
+  // Ends only the selected cities; the other active cities stay active.
+  endSelBtn.addEventListener('click', async () => {
+    const body = { cities: selected, mode: document.querySelector('input[name="mode"]:checked').value };
+    await fetch('/api/end', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    pollStatus();
+  });
+
   async function pollStatus() {
     try {
       const res = await fetch('/api/status');
@@ -441,7 +414,7 @@ function getHtml(): string {
       if (data.active) {
         statusBar.className = 'status-bar status-active';
         const cats = {rockets:'Rockets',uav:'UAV',terror:'Terror',nonconventional:'Non-conventional'};
-        statusBar.textContent = '\\ud83d\\udea8 ' + (cats[data.active.category]||data.active.category) + ': ' + data.active.cities.slice(0,3).join(', ') + (data.active.cities.length > 3 ? ' +' + (data.active.cities.length-3) : '');
+        statusBar.textContent = '\\ud83d\\udea8 ' + data.active.categories.map(c => cats[c]||c).join(' / ') + ' (' + data.active.cities.length + '): ' + data.active.cities.slice(0,3).join(', ') + (data.active.cities.length > 3 ? ' +' + (data.active.cities.length-3) : '');
       } else {
         statusBar.className = 'status-bar status-idle';
         statusBar.textContent = 'No active alert';
@@ -466,7 +439,8 @@ server.listen(PORT, '0.0.0.0', () => {
 ║  WS:      ws://${LAN_IP}:${PORT}/socket                        ║
 ║                                                               ║
 ║  Both endpoints deliver the same alert simultaneously.       ║
-║  Use both as custom sources to test deduplication.            ║
+║  Alerts are per city: firing adds cities, End Selected ends  ║
+║  only those, End All ends every active city.                  ║
 ╚═══════════════════════════════════════════════════════════════╝
 `);
 });

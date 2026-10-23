@@ -7,13 +7,14 @@ import {
 } from './settings';
 import _ from 'lodash';
 import { CATEGORY_MAP, ALL_CATEGORY_KEYS, SensorConfig } from './types';
-import { validateConfig } from './utils/configValidator';
+import { validateConfig, resolveAppleTvConfig } from './utils/configValidator';
 import { createDebugLogger, DebugLogger } from './utils/debugLogger';
 import { AlertPipeline, ExpiryStage, DeduplicationStage, AlertHistory } from './pipeline';
 import * as fs from 'fs';
 import * as path from 'path';
 import { SensorFilter } from './services/SensorFilter';
 import { WebhookService, WebhookConfig } from './services/WebhookService';
+import { CompositeNotifier } from './services/AlertNotifier';
 import { HealthStatusService } from './services/HealthStatusService';
 import { OrefClient } from './clients/orefClient';
 import { HttpSource, HttpSourceConfig } from './clients/httpSource';
@@ -22,6 +23,8 @@ import { CategoryMapping, DEFAULT_RESPONSE_FORMAT } from './clients/categoryMapp
 import { parseTzofarMessage, loadTzofarCityMap } from './clients/tzofarParser';
 import { MotionSensorAccessory } from './accessories/MotionSensorAccessory';
 import { HealthCheckAccessory } from './accessories/HealthCheckAccessory';
+import { AppleTvDoorbell } from './accessories/AppleTvDoorbell';
+import { resolveFfmpegPath } from './accessories/FfmpegStillStream';
 import { migrateConfig } from './utils/migrationHelper';
 import { TelegramSource, SharedTelegramClient, createSharedTelegramClient } from './clients/telegramSource';
 import { buildCityIndex } from './clients/telegramParser';
@@ -37,6 +40,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
   private history: AlertHistory | null = null;
   private sharedTgClient: SharedTelegramClient | null = null;
   private telegramSources: TelegramSource[] = [];
+  private tv: AppleTvDoorbell | null = null;
   private readonly historyFilePath: string;
 
   constructor(
@@ -90,6 +94,7 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     for (const accessory of this.sensorAccessories) {
       accessory.destroy();
     }
+    this.tv?.destroy();
   }
 
   configureAccessory(accessory: PlatformAccessory) {
@@ -104,6 +109,9 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     webhook: WebhookService | null,
   ) {
     const activeUUIDs = new Set<string>();
+    const tv = this.createAppleTv();
+    const tvSensors = resolveAppleTvConfig(this.config).sensors;
+    const wantsTv = (sensor: SensorConfig) => _.isEmpty(tvSensors) || _.includes(tvSensors, sensor.name);
 
     for (const sensor of sensors) {
       const cities = this.parseCities(sensor);
@@ -121,7 +129,8 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
       this.sensorAccessories.push(sensorAccessory);
       const filter = new SensorFilter(
         sensor.name, this.log, sensorAccessory, cities,
-        allowedCategories, prefixMatching, webhook ?? undefined,
+        allowedCategories, prefixMatching,
+        CompositeNotifier.of(webhook, tv && wantsTv(sensor) ? tv.notifier : null),
       );
       pipeline.subscribe(filter);
 
@@ -148,9 +157,26 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     }
 
     this.removeStaleAccessories(activeUUIDs);
+    if (tv) {
+      // External accessories have their own HAP server and are never cached, so publish on every launch.
+      this.api.publishExternalAccessories(PLUGIN_NAME, [tv.accessory]);
+      tv.warmUp();
+      this.log.info(`[AppleTV] Published doorbell "${tv.accessory.displayName}". Pair it in the Home app to get alerts on Apple TV.`);
+    }
     pipeline.start();
     statusService.update(pipeline.getSourceStatus());
     this.log.info('Red Alert is running. You may close the config window.');
+  }
+
+  private createAppleTv(): AppleTvDoorbell | null {
+    if (!_.get(this.config, 'apple_tv_alerts', false)) {
+      return null;
+    }
+    const { name, minRingInterval, maxCities, ffmpegPath } = resolveAppleTvConfig(this.config);
+    this.tv = new AppleTvDoorbell(this.log, this.api, {
+      name, minRingInterval, maxCities, ffmpegPath: resolveFfmpegPath(ffmpegPath),
+    });
+    return this.tv;
   }
 
   private buildPipeline(

@@ -386,6 +386,44 @@
       <button type="button" class="btn-secondary" onclick="addWebhook()" style="margin-top:4px;">+ Add Webhook</button>
     </div>
 
+    <h6 style="margin: 16px 0 8px; color: var(--text-muted)">Apple TV (beta)</h6>
+    <div class="field-group">
+      <label><input type="checkbox" id="apple_tv_alerts" /> Show alerts on Apple TV</label>
+      <div class="help-text">
+        Shows a banner with the alert picture (map, alert type, cities, time) on Apple TV over whatever is playing.
+        Works through a HomeKit doorbell, so iPhone, iPad, Mac and Apple Watch also get a notification with the
+        picture, and HomePod may play a doorbell chime (no picture or text; set in the Home app).
+        After saving and restarting Homebridge:
+        1) in the Home app tap + &gt; Add Accessory &gt; More options and pair "Red Alert TV" with the bridge PIN;
+        2) open the doorbell's settings and turn notifications on;
+        3) keep Camera Status set to Stream (At Home and Away) &mdash; when it is Off there is no picture.
+      </div>
+    </div>
+    <div class="field-group">
+      <label>Doorbell Name</label>
+      <input type="text" id="apple_tv_name" placeholder="Red Alert TV" />
+    </div>
+    <div class="field-group">
+      <label>Sensors That Ring the Apple TV</label>
+      <input type="text" id="apple_tv_sensors" placeholder="All sensors" />
+      <div class="help-text">Comma-separated sensor names. Leave empty to use all sensors.</div>
+    </div>
+    <div class="field-group">
+      <label>Minimum Time Between Rings (ms)</label>
+      <input type="number" id="apple_tv_min_ring_interval" min="5000" max="600000" value="20000" />
+      <div class="help-text">New cities within this time update the picture without ringing again. Default: 20000.</div>
+    </div>
+    <div class="field-group">
+      <label>Cities Shown in the Picture</label>
+      <input type="number" id="apple_tv_max_cities" min="1" max="20" value="12" />
+      <div class="help-text">The rest are summarized as "ועוד N". Default: 12.</div>
+    </div>
+    <div class="field-group">
+      <label>ffmpeg Path</label>
+      <input type="text" id="apple_tv_ffmpeg_path" placeholder="ffmpeg" />
+      <div class="help-text">Optional. The picture is sent as live video using the ffmpeg installed with the plugin; set only to use a different build.</div>
+    </div>
+
     <h6 style="margin: 16px 0 8px; color: var(--text-muted)">General</h6>
     <div class="field-group">
       <label><input type="checkbox" id="debug" /> Enable Debug Logs</label>
@@ -441,6 +479,8 @@
   ];
 
   const CATEGORY_KEYS = CATEGORIES.map((c) => c.key);
+  // Custom source mappings can also mark a source's own "event ended" code.
+  const MAPPING_CATEGORIES = [...CATEGORIES, { key: "eventended", label: "Event Ended (האירוע הסתיים)" }];
 
   async function init() {
     homebridge.showSpinner();
@@ -503,6 +543,12 @@
     document.getElementById("health_check_threshold").value =
       config.health_check_threshold ?? 5;
     document.getElementById("debug").checked = config.debug ?? false;
+    document.getElementById("apple_tv_alerts").checked = config.apple_tv_alerts ?? false;
+    document.getElementById("apple_tv_name").value = config.apple_tv_name ?? "";
+    document.getElementById("apple_tv_sensors").value = (config.apple_tv_sensors || []).join(", ");
+    document.getElementById("apple_tv_min_ring_interval").value = config.apple_tv_min_ring_interval ?? 20000;
+    document.getElementById("apple_tv_max_cities").value = config.apple_tv_max_cities ?? 12;
+    document.getElementById("apple_tv_ffmpeg_path").value = config.apple_tv_ffmpeg_path ?? "";
     document.getElementById("telegram_api_id").value = config.telegram_api_id ?? "";
     document.getElementById("telegram_api_hash").value = config.telegram_api_hash ?? "";
 
@@ -580,7 +626,7 @@
                   <input type="text" class="catmap-key" value="${escapeHtml(k)}" placeholder="ID value (e.g. 1, ROCKET)" style="flex:1;padding:4px 8px;border-radius:4px;">
                   <span style="color:var(--text-muted);">&#8594;</span>
                   <select class="catmap-value" style="flex:1;padding:4px 8px;border-radius:4px;">
-                    ${CATEGORIES.map((c) => `<option value="${c.key}" ${v === c.key ? "selected" : ""}>${c.label}</option>`).join("")}
+                    ${MAPPING_CATEGORIES.map((c) => `<option value="${c.key}" ${v === c.key ? "selected" : ""}>${c.label}</option>`).join("")}
                   </select>
                   <button type="button" onclick="this.parentElement.remove();updateCatmapOptions(this.closest('.category-mapping-rows'));syncConfig();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
                 </div>
@@ -903,7 +949,7 @@
       if (!sel) return;
       const current = sel.value;
       const used = getUsedCategories(container, row);
-      sel.innerHTML = CATEGORIES
+      sel.innerHTML = MAPPING_CATEGORIES
         .filter((c) => c.key === current || !used.has(c.key))
         .map((c) => `<option value="${c.key}" ${c.key === current ? "selected" : ""}>${c.label}</option>`)
         .join("");
@@ -911,14 +957,14 @@
     const addonId = container.id.replace("catmap-", "");
     const addBtn = document.getElementById(`addmap-btn-${addonId}`);
     if (addBtn) {
-      addBtn.style.display = allUsed.size >= CATEGORIES.length ? "none" : "";
+      addBtn.style.display = allUsed.size >= MAPPING_CATEGORIES.length ? "none" : "";
     }
   }
 
   function addCatmapRow(addonId) {
     const container = document.getElementById(`catmap-${addonId}`);
     const used = getUsedCategories(container, null);
-    const available = CATEGORIES.filter((c) => !used.has(c.key));
+    const available = MAPPING_CATEGORIES.filter((c) => !used.has(c.key));
     if (available.length === 0) return;
     const row = document.createElement("div");
     row.className = "catmap-row";
@@ -1238,6 +1284,22 @@
     if (webhooks.length > 0) {
       config.webhooks = webhooks;
     }
+
+    // Apple TV settings are kept while the feature is off, so turning it off and
+    // on again doesn't lose the name or sensor list. Defaults aren't written.
+    const tvEnabled = document.getElementById("apple_tv_alerts").checked;
+    if (tvEnabled) config.apple_tv_alerts = true;
+    const tvName = document.getElementById("apple_tv_name").value.trim();
+    if (tvName) config.apple_tv_name = tvName;
+    const tvSensors = document.getElementById("apple_tv_sensors").value
+      .split(",").map((s) => s.trim()).filter(Boolean);
+    if (tvSensors.length > 0) config.apple_tv_sensors = tvSensors;
+    const tvInterval = parseInt(document.getElementById("apple_tv_min_ring_interval").value) || 20000;
+    if (tvEnabled || tvInterval !== 20000) config.apple_tv_min_ring_interval = tvInterval;
+    const tvMaxCities = parseInt(document.getElementById("apple_tv_max_cities").value) || 12;
+    if (tvEnabled || tvMaxCities !== 12) config.apple_tv_max_cities = tvMaxCities;
+    const tvFfmpeg = document.getElementById("apple_tv_ffmpeg_path").value.trim();
+    if (tvFfmpeg) config.apple_tv_ffmpeg_path = tvFfmpeg;
 
     return config;
   }

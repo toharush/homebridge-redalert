@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { OrefRealtimeAlert } from '../types';
-import { CATEGORY_MAP } from '../types';
+import { CATEGORY_MAP, EVENT_ENDED_PATTERN, OrefCategory } from '../types';
 
 export type CategoryKey =
   | 'rockets' | 'uav' | 'nonconventional' | 'warning'
@@ -26,19 +26,35 @@ export function normalizeAlerts(
   const alerts: OrefRealtimeAlert[] = [];
 
   for (const raw of rawAlerts) {
-    const sourceCat = String(raw[format.category_field] ?? '');
-    const mappedCat = mapAlertCategory(sourceCat, mapping);
+    const title = String(raw[format.title_field] ?? '');
+    // "האירוע הסתיים" is the all-clear whatever category the source files it under
+    // (Oref and its mirrors use cat 10, which presets map to "warning"), the same
+    // rule OrefClient applies. Without it the end of an event re-arms sensors as a
+    // warning, or is dropped when the category isn't mapped.
+    const mappedCat = EVENT_ENDED_PATTERN.test(title)
+      ? OrefCategory.EventEnded
+      : mapAlertCategory(String(raw[format.category_field] ?? ''), mapping);
     if (mappedCat === undefined) {
       continue;
     }
 
     const cities = raw[format.cities_field];
-    const data: string[] = Array.isArray(cities) ? cities : typeof cities === 'string' ? [cities] : [];
+    // City names are matched exactly (and with prefix_matching, by startsWith),
+    // so a stray space would miss the configured city and a blank or non-string
+    // entry must never reach the matchers.
+    const list: unknown[] = Array.isArray(cities) ? cities : cities === undefined || cities === null ? [] : [cities];
+    const data: string[] = [];
+    for (const c of list) {
+      const name = typeof c === 'string' ? c.trim() : typeof c === 'number' ? String(c) : '';
+      if (name) {
+        data.push(name);
+      }
+    }
 
     alerts.push({
       id: String(raw[format.id_field] ?? crypto.randomUUID()),
       cat: String(mappedCat),
-      title: String(raw[format.title_field] ?? ''),
+      title,
       data,
       desc: String(raw[format.description_field] ?? ''),
     });

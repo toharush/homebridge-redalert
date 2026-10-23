@@ -23,6 +23,9 @@
   "main": "dist/index.js",
   "files": [
     "dist/",
+    "assets/fonts/",
+    "assets/fallback-alert.jpg",
+    "assets/no-alerts.jpg",
     "config.schema.json",
     "homebridge-ui/",
     "LICENSE",
@@ -33,7 +36,7 @@
     "watch": "npm run build && npm link && nodemon",
     "build": "rimraf ./dist && tsc && npm run copy-data",
     "copy-data": "mkdir -p dist/data && cp src/data/cities.json dist/data/",
-    "test": "tsx --test src/**/*.spec.ts",
+    "test": "tsx --test 'src/**/*.spec.ts'",
     "mock": "tsx mock-server.ts",
     "test:connectivity": "tsx --test src/clients/connectivity.test.ts",
     "prepublishOnly": "npm run lint && npm run build",
@@ -71,7 +74,11 @@
     "smart-home",
     "home-automation",
     "homebridge-redalert",
-    "homebridge-red-alert"
+    "homebridge-red-alert",
+    "apple-tv",
+    "appletv",
+    "tvos",
+    "doorbell"
   ],
   "dependencies": {
     "@homebridge/plugin-ui-utils": "^2.2.5",
@@ -81,8 +88,8 @@
   },
   "devDependencies": {
     "@types/lodash": "^4.17.25",
-    "@types/ws": "^8.18.1",
     "@types/node": "^26.2.0",
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.67.0",
     "eslint": "^10.9.0",
@@ -92,5 +99,13 @@
     "ts-node": "^10.9.2",
     "tsx": "^4.23.12",
     "typescript": "^5.9.3"
+  },
+  "optionalDependencies": {
+    "@napi-rs/canvas": "1.0.10",
+    "ffmpeg-for-homebridge": "2.2.2"
+  },
+  "overrides": {
+    "brace-expansion": "^5.0.12",
+    "ip-address": "^10.7.4"
   }
 }
