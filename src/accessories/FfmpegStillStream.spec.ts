@@ -229,24 +229,40 @@ describe('FfmpegStillStream', () => {
     assert.strictEqual(procs[0].kill.mock.calls[0].arguments[0], 'SIGTERM');
   });
 
-  it('stops the stream shortly after the last alert ends', async () => {
+  it('keeps streaming with no alert, one frame a second, and sends a new alert at once', async () => {
     mock.timers.enable({ apis: ['setInterval', 'Date'] });
     const { stream, src, procs, forceStop } = make({ fps: 5 });
+    src.on = false;
     await prepare(stream);
     start(stream);
+    await flush();
+    const proc = procs[0];
+    mock.timers.tick(1000); // the first second runs at full rate so ffmpeg starts fast
+    const sentAfter = (ms: number) => {
+      const before = proc.written.length;
+      for (let t = 0; t < ms; t += 200) {
+        mock.timers.tick(200);
+      }
+      return proc.written.length - before;
+    };
+    assert.strictEqual(sentAfter(3000), 3, 'idle: about one frame a second');
+    assert.strictEqual(forceStop.mock.calls.length, 0, 'the stream stays open with no alert');
+
+    src.on = true;
+    src.v = 2;
     mock.timers.tick(200);
-    assert.strictEqual(forceStop.mock.calls.length, 0, 'runs while an alert is active');
-    src.on = false;
-    // mock.timers moves Date to the end of a tick() before running timers, so step in ticks.
-    for (let t = 0; t < 1400; t += 200) {
-      mock.timers.tick(200);
-    }
-    assert.strictEqual(forceStop.mock.calls.length, 0, 'sends the "no active alerts" picture first');
-    for (let t = 0; t < 400; t += 200) {
-      mock.timers.tick(200);
-    }
-    assert.deepStrictEqual(forceStop.mock.calls[0].arguments, ['s1']);
-    assert.strictEqual(procs[0].kill.mock.calls[0].arguments[0], 'SIGTERM');
+    await flush();
+    assert.strictEqual(proc.written[proc.written.length - 1].toString(), 'v2:640x360', 'new alert sent at once');
+    assert.strictEqual(sentAfter(1000), 5, 'alert: full rate');
+  });
+
+  it('times frames by arrival and lets ffmpeg repeat them at a constant rate', async () => {
+    const { stream, calls } = make();
+    await prepare(stream);
+    start(stream);
+    const args = calls[calls.length - 1];
+    assert.ok(args.indexOf('-use_wallclock_as_timestamps') < args.indexOf('-i'));
+    assert.strictEqual(args[args.indexOf('-fps_mode') + 1], 'cfr');
   });
 
   it('runs two viewers independently', async () => {
@@ -286,14 +302,12 @@ describe('AlertSnapshotDelegate with a stream', () => {
     assert.strictEqual(stream.prepare.mock.calls.length, 1);
   });
 
-  it('refuses to stream when no alert is active', () => {
+  it('streams even when no alert is active, so an open viewer sees the next alert at once', () => {
     const d = new AlertSnapshotDelegate(notifier as any, renderer);
     const stream = { available: true, prepare: mock.fn(), handle: mock.fn() };
     d.stream = stream;
-    const cb = mock.fn();
-    d.prepareStream({} as any, cb);
-    assert.match(String(cb.mock.calls[0].arguments[0]), /no active alert/);
-    assert.strictEqual(stream.prepare.mock.calls.length, 0);
+    d.prepareStream({} as any, mock.fn());
+    assert.strictEqual(stream.prepare.mock.calls.length, 1);
   });
 
   it('serves the static picture when nothing is active', async () => {

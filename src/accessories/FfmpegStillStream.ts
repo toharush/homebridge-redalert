@@ -9,7 +9,7 @@ import { DebugLogger } from '../utils/debugLogger';
 /** Where stream frames come from: the current alert card, rendered at the stream's size. */
 export interface FrameSource {
   version(): number;
-  /** True while at least one alert is active; the stream ends right after the last one does. */
+  /** True while at least one alert is active; frames are sent faster then. */
   active(): boolean;
   frameFor(width: number, height: number): Promise<Buffer>;
 }
@@ -18,8 +18,10 @@ export type SpawnFn = (command: string, args: string[], options: SpawnOptions) =
 
 export interface StillStreamOptions {
   ffmpegPath: string;
-  /** Frames per second sent to the viewer. The card changes rarely, so a low rate is enough. */
+  /** Frames per second sent to the viewer during an alert. The card changes rarely, so a low rate is enough. */
   fps?: number;
+  /** With no active alert, feed ffmpeg one frame this often; ffmpeg repeats it to keep the output rate. */
+  idleFrameMs?: number;
   /** Stop a session after this long without RTCP from the viewer (it can vanish without STOP). */
   idleTimeoutMs?: number;
   spawn?: SpawnFn;
@@ -28,9 +30,10 @@ export interface StillStreamOptions {
 
 export const STREAM_FPS = 5;
 const IDLE_TIMEOUT_MS = 30000;
-// After the last alert ends, send the "no active alerts" picture this long before
-// stopping, so the frame the Home app keeps on the tile is that one, not the alert.
-const ENDED_GRACE_MS = 1500;
+const IDLE_FRAME_MS = 1000;
+// ffmpeg holds its first output until about 3 frames are in, so every session
+// starts at the full rate; with idle pacing alone the first picture took 2 s.
+const STARTUP_MS = 1000;
 const KILL_GRACE_MS = 2000;
 const STDERR_TAIL = 600;
 
@@ -58,8 +61,10 @@ interface Session {
   frameVersion: number;
   pending: boolean;
   lastRtcp: number;
-  /** When the last alert ended while this session was running; 0 while alerts are active. */
-  endedAt: number;
+  /** When a frame was last written to ffmpeg. */
+  lastSent: number;
+  /** When ffmpeg was started for this session. */
+  startedAt: number;
   stderr: string;
   stopping: boolean;
 }
@@ -68,15 +73,18 @@ interface Session {
  * Live video for the doorbell camera: a slowly changing still image (the alert
  * card) encoded by an ffmpeg child process and sent to the viewer as SRTP.
  *
- * Cost is kept low: ffmpeg only runs while a device is watching, at a few
- * frames per second, with x264's still-image tuning so unchanged frames encode
- * to almost nothing, and at a lower OS priority than Homebridge. The card is
+ * Cost is kept low: ffmpeg only runs while a device is watching. It is fed one
+ * frame a second with no alert and a few a second during one (a new picture
+ * goes out at once either way), and repeats the last frame to keep a steady
+ * output. x264's still-image tuning encodes unchanged frames to almost nothing,
+ * and ffmpeg runs at a lower OS priority than Homebridge. The card is
  * re-rendered (in the render worker) only when the alert set changes. Nothing
  * here runs on the alert path: a stream only starts when a viewer asks for one.
  */
 export class FfmpegStillStream {
   private readonly sessions = new Map<string, Session>();
   private readonly fps: number;
+  private readonly idleFrameMs: number;
   private readonly idleTimeoutMs: number;
   private readonly spawn: SpawnFn;
   private readonly now: () => number;
@@ -93,6 +101,7 @@ export class FfmpegStillStream {
   ) {
     this.ffmpegPath = options.ffmpegPath;
     this.fps = options.fps ?? STREAM_FPS;
+    this.idleFrameMs = options.idleFrameMs ?? IDLE_FRAME_MS;
     this.idleTimeoutMs = options.idleTimeoutMs ?? IDLE_TIMEOUT_MS;
     this.spawn = options.spawn ?? nodeSpawn;
     this.now = options.now ?? Date.now;
@@ -146,7 +155,8 @@ export class FfmpegStillStream {
       frameVersion: -1,
       pending: false,
       lastRtcp: this.now(),
-      endedAt: 0,
+      lastSent: 0,
+      startedAt: 0,
       stderr: '',
       stopping: false,
     };
@@ -206,12 +216,15 @@ export class FfmpegStillStream {
       '-hide_banner', '-loglevel', 'error', '-nostdin',
       // Start encoding on the first frame instead of probing the input for seconds.
       '-fflags', 'nobuffer', '-probesize', '32', '-analyzeduration', '0',
-      '-f', 'image2pipe', '-c:v', 'mjpeg', '-framerate', String(fps), '-i', 'pipe:0',
+      // Frames arrive at a varying rate (1 fps idle, more during an alert): time them by
+      // arrival, and let -fps_mode cfr below repeat the last one to keep a steady output.
+      '-use_wallclock_as_timestamps', '1',
+      '-f', 'image2pipe', '-c:v', 'mjpeg', '-i', 'pipe:0',
       '-an', '-sn', '-dn',
       '-vf', `scale=${width}:${height}:flags=fast_bilinear,format=yuv420p`,
       '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'stillimage,zerolatency',
       '-profile:v', 'baseline', '-level:v', '3.1', '-threads', '1',
-      '-r', String(fps), '-g', String(fps * 2),
+      '-fps_mode', 'cfr', '-r', String(fps), '-g', String(fps * 2),
       '-b:v', `${kbps}k`, '-maxrate', `${kbps}k`, '-bufsize', `${kbps * 2}k`,
       '-payload_type', String(pt), '-ssrc', String(s.ssrc),
       '-f', 'rtp', '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80', '-srtp_out_params', s.srtp,
@@ -228,6 +241,7 @@ export class FfmpegStillStream {
     }
     s.proc = proc;
     s.lastRtcp = this.now();
+    s.startedAt = this.now();
     // Every stream error must be handled: an unhandled 'error' event crashes Homebridge.
     proc.on('error', (err) => {
       this.log.warn(`[AppleTV] ffmpeg error: ${err.message}`);
@@ -264,33 +278,34 @@ export class FfmpegStillStream {
       this.end(s.id, true);
       return;
     }
-    // No alert, no stream: after a short "no active alerts" tail, free ffmpeg.
-    if (this.frames.active()) {
-      s.endedAt = 0;
-    } else if (!s.endedAt) {
-      s.endedAt = this.now();
-    } else if (this.now() - s.endedAt >= ENDED_GRACE_MS) {
-      this.log.easyDebug('[AppleTV] All alerts ended, stopping stream');
-      this.end(s.id, true);
-      return;
-    }
     // Re-render only when the alert set changed; the render is cached and runs in the worker.
+    // A new picture goes out at once, so a viewer sees a new alert within one render.
     const version = this.frames.version();
     if (version !== s.frameVersion && !s.pending) {
       s.pending = true;
       this.frames.frameFor(width, height).then((frame) => {
         s.frame = frame;
         s.frameVersion = version;
+        this.send(s);
       }, () => {
         // Keep sending the previous frame; the next tick tries again.
       }).finally(() => {
         s.pending = false;
       });
     }
+    // With no alert the picture is still: one frame a second is enough, ffmpeg repeats it.
+    const fullRate = this.frames.active() || this.now() - s.startedAt < STARTUP_MS;
+    if (fullRate || this.now() - s.lastSent >= this.idleFrameMs) {
+      this.send(s);
+    }
+  }
+
+  private send(s: Session): void {
     const stdin = s.proc?.stdin;
     // A full pipe means ffmpeg is behind: drop this frame instead of queueing it.
     if (s.frame && stdin && !stdin.destroyed && !stdin.writableNeedDrain) {
       stdin.write(s.frame);
+      s.lastSent = this.now();
     }
   }
 

@@ -46,12 +46,13 @@ export class AlertSnapshotDelegate implements CameraStreamingDelegate {
   }
 
   prepareStream(req: PrepareStreamRequest, cb: PrepareStreamCallback): void {
-    // Stream only during an alert; with nothing active the camera is just the still picture.
-    if (this.stream?.available && this.notifier.snapshot().active.size > 0) {
+    // Stream with or without an alert: an open viewer then switches to a new alert at once,
+    // instead of waiting for the Home app to refresh its snapshot.
+    if (this.stream?.available) {
       this.stream.prepare(req, cb);
       return;
     }
-    cb(new Error(this.stream?.available ? 'no active alert' : 'snapshot-only'));
+    cb(new Error('snapshot-only'));
   }
 
   handleStreamRequest(req: StreamingRequest, cb: StreamRequestCallback): void {
