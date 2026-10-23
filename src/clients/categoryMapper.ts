@@ -39,7 +39,17 @@ export function normalizeAlerts(
     }
 
     const cities = raw[format.cities_field];
-    const data: string[] = Array.isArray(cities) ? cities : typeof cities === 'string' ? [cities] : [];
+    // City names are matched exactly (and with prefix_matching, by startsWith),
+    // so a stray space would miss the configured city and a blank or non-string
+    // entry must never reach the matchers.
+    const list: unknown[] = Array.isArray(cities) ? cities : cities === undefined || cities === null ? [] : [cities];
+    const data: string[] = [];
+    for (const c of list) {
+      const name = typeof c === 'string' ? c.trim() : typeof c === 'number' ? String(c) : '';
+      if (name) {
+        data.push(name);
+      }
+    }
 
     alerts.push({
       id: String(raw[format.id_field] ?? crypto.randomUUID()),

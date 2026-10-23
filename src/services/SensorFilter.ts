@@ -59,6 +59,14 @@ export function parseAlerts(alerts: OrefRealtimeAlert[]): ParsedAlerts {
 export class SensorFilter implements AlertListener {
   private readonly citySet: Set<string>;
   private readonly activeCities = new Map<string, number>();
+  /**
+   * prefix_matching only: the alert cities that are keeping each configured
+   * city active. With prefix matching one configured city ("תל אביב") is
+   * activated by several sub-areas ("תל אביב - מזרח", "תל אביב - דרום ..."), and
+   * the end of one of them must not turn the sensor off while another is still
+   * under alert.
+   */
+  private readonly activeSources = new Map<string, Set<string>>();
   private readonly notifier: AlertNotifier | null;
   private hasBroadcast = false;
 
@@ -105,7 +113,9 @@ export class SensorFilter implements AlertListener {
 
     const events: WebhookPayload[] = [];
     for (const configured of this.citySet) {
-      if ((nationwideEnd || this.findMatchInSet(configured, endedCities)) && this.activeCities.delete(configured)) {
+      if (this.activeCities.has(configured) && this.endsConfigured(configured, nationwideEnd, endedCities)) {
+        this.activeCities.delete(configured);
+        this.activeSources.delete(configured);
         events.push(ended(this.name, configured));
       }
 
@@ -113,6 +123,9 @@ export class SensorFilter implements AlertListener {
       if (match) {
         const isNew = !this.activeCities.has(configured);
         this.activeCities.set(configured, Date.now());
+        if (this.prefixMatching) {
+          this.addSources(configured, nationwideAlert ? null : relevantCities);
+        }
         if (isNew) {
           events.push(alerted(this.name, configured, match));
         }
@@ -178,19 +191,59 @@ export class SensorFilter implements AlertListener {
     return this.tryMatchCategory(relevantCities.get(NATIONWIDE_CITY));
   }
 
-  private findMatchInSet(configured: string, alertCities: Set<string>): boolean {
-    if (alertCities.has(configured)) {
+  /**
+   * Whether this batch's event-ended ends an active configured city. A
+   * nationwide end, or an end naming the configured city itself, always does.
+   * With prefix matching, an ended city releases each alert city it
+   * prefix-matches among those keeping `configured` active, and `configured`
+   * ends once none is left — so "תל אביב - מזרח" ending leaves "תל אביב" on
+   * while "תל אביב - דרום ..." is still under alert.
+   */
+  private endsConfigured(configured: string, nationwideEnd: boolean, endedCities: Set<string>): boolean {
+    if (nationwideEnd || endedCities.has(configured)) {
       return true;
     }
-    if (!this.prefixMatching) {
+    if (!this.prefixMatching || endedCities.size === 0) {
       return false;
     }
-    for (const alertCity of alertCities) {
-      if (alertCity.startsWith(configured) || configured.startsWith(alertCity)) {
+    const sources = this.activeSources.get(configured);
+    if (!sources) {
+      return this.prefixMatchesAny(configured, endedCities);
+    }
+    for (const source of sources) {
+      if (endedCities.has(source) || this.prefixMatchesAny(source, endedCities)) {
+        sources.delete(source);
+      }
+    }
+    return sources.size === 0;
+  }
+
+  private prefixMatchesAny(city: string, others: Iterable<string>): boolean {
+    for (const other of others) {
+      if (other.startsWith(city) || city.startsWith(other)) {
         return true;
       }
     }
     return false;
+  }
+
+  /** Records which alert cities matched `configured` (null: a nationwide alert). */
+  private addSources(configured: string, relevantCities: Map<string, CityAlert[]> | null): void {
+    let sources = this.activeSources.get(configured);
+    if (!sources) {
+      sources = new Set();
+      this.activeSources.set(configured, sources);
+    }
+    if (!relevantCities) {
+      sources.add(NATIONWIDE_CITY);
+      return;
+    }
+    for (const [alertCity, entries] of relevantCities) {
+      if ((alertCity === configured || alertCity.startsWith(configured) || configured.startsWith(alertCity))
+        && this.tryMatchCategory(entries)) {
+        sources.add(alertCity);
+      }
+    }
   }
 
   private findMatchingAlert(configured: string, relevantCities: Map<string, CityAlert[]>): CityAlert | undefined {

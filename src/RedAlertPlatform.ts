@@ -172,9 +172,9 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     if (!_.get(this.config, 'apple_tv_alerts', false)) {
       return null;
     }
-    const { name, minRingInterval, maxCities, stream, ffmpegPath } = resolveAppleTvConfig(this.config);
+    const { name, minRingInterval, maxCities, ffmpegPath } = resolveAppleTvConfig(this.config);
     this.tv = new AppleTvDoorbell(this.log, this.api, {
-      name, minRingInterval, maxCities, ffmpegPath: stream ? resolveFfmpegPath(ffmpegPath) : null,
+      name, minRingInterval, maxCities, ffmpegPath: resolveFfmpegPath(ffmpegPath),
     });
     return this.tv;
   }

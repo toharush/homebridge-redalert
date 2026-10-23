@@ -53,3 +53,20 @@ describe('normalizeAlerts — event ended', () => {
     );
   });
 });
+
+describe('normalizeAlerts — city values', () => {
+  it('trims names, keeps numbers as strings, drops blank / non-string entries', () => {
+    const out = normalizeAlerts(
+      [{ id: '1', cat: '1', title: 't', data: [' חיפה ', '', '   ', null, 7, { x: 1 }, 'עכו'], desc: '' }],
+      { '1': 'rockets' }, DEFAULT_RESPONSE_FORMAT,
+    );
+    assert.deepStrictEqual(out[0].data, ['חיפה', '7', 'עכו']);
+  });
+
+  it('a single city given as a string becomes a one-element list; a blank one becomes empty', () => {
+    const one = normalizeAlerts([{ id: '1', cat: '1', title: 't', data: ' חיפה', desc: '' }], { '1': 'rockets' }, DEFAULT_RESPONSE_FORMAT);
+    assert.deepStrictEqual(one[0].data, ['חיפה']);
+    const blank = normalizeAlerts([{ id: '1', cat: '10', title: EVENT_ENDED_TITLE, data: ' ', desc: '' }], {}, DEFAULT_RESPONSE_FORMAT);
+    assert.deepStrictEqual(blank[0].data, [], 'a blank end must not reach the (prefix) matchers');
+  });
+});

@@ -46,11 +46,12 @@ export class AlertSnapshotDelegate implements CameraStreamingDelegate {
   }
 
   prepareStream(req: PrepareStreamRequest, cb: PrepareStreamCallback): void {
-    if (this.stream?.available) {
+    // Stream only during an alert; with nothing active the camera is just the still picture.
+    if (this.stream?.available && this.notifier.snapshot().active.size > 0) {
       this.stream.prepare(req, cb);
       return;
     }
-    cb(new Error('snapshot-only'));
+    cb(new Error(this.stream?.available ? 'no active alert' : 'snapshot-only'));
   }
 
   handleStreamRequest(req: StreamingRequest, cb: StreamRequestCallback): void {
@@ -64,6 +65,10 @@ export class AlertSnapshotDelegate implements CameraStreamingDelegate {
   /** Changes whenever the set of active alerts does; the stream re-renders only then. */
   version(): number {
     return this.notifier.snapshot().version;
+  }
+
+  active(): boolean {
+    return this.notifier.snapshot().active.size > 0;
   }
 
   /** The current picture at this size: the alert card, or the static picture when nothing is active. */

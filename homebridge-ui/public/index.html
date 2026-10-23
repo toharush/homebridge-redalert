@@ -419,13 +419,9 @@
       <div class="help-text">The rest are summarized as "ועוד N". Default: 12.</div>
     </div>
     <div class="field-group">
-      <label><input type="checkbox" id="apple_tv_stream" /> Live Picture (Video Stream)</label>
-      <div class="help-text">Updates the picture live while a device shows the camera (new cities, ended alerts). ffmpeg is installed with the plugin; uses CPU only while someone is watching.</div>
-    </div>
-    <div class="field-group">
       <label>ffmpeg Path</label>
       <input type="text" id="apple_tv_ffmpeg_path" placeholder="ffmpeg" />
-      <div class="help-text">Optional. Leave empty to use the ffmpeg installed with the plugin.</div>
+      <div class="help-text">Optional. The picture is sent as live video using the ffmpeg installed with the plugin; set only to use a different build.</div>
     </div>
 
     <h6 style="margin: 16px 0 8px; color: var(--text-muted)">General</h6>
@@ -552,7 +548,6 @@
     document.getElementById("apple_tv_sensors").value = (config.apple_tv_sensors || []).join(", ");
     document.getElementById("apple_tv_min_ring_interval").value = config.apple_tv_min_ring_interval ?? 20000;
     document.getElementById("apple_tv_max_cities").value = config.apple_tv_max_cities ?? 12;
-    document.getElementById("apple_tv_stream").checked = config.apple_tv_stream ?? false;
     document.getElementById("apple_tv_ffmpeg_path").value = config.apple_tv_ffmpeg_path ?? "";
     document.getElementById("telegram_api_id").value = config.telegram_api_id ?? "";
     document.getElementById("telegram_api_hash").value = config.telegram_api_hash ?? "";
@@ -1303,7 +1298,6 @@
     if (tvEnabled || tvInterval !== 20000) config.apple_tv_min_ring_interval = tvInterval;
     const tvMaxCities = parseInt(document.getElementById("apple_tv_max_cities").value) || 12;
     if (tvEnabled || tvMaxCities !== 12) config.apple_tv_max_cities = tvMaxCities;
-    if (document.getElementById("apple_tv_stream").checked) config.apple_tv_stream = true;
     const tvFfmpeg = document.getElementById("apple_tv_ffmpeg_path").value.trim();
     if (tvFfmpeg) config.apple_tv_ffmpeg_path = tvFfmpeg;
 

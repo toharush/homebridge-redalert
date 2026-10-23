@@ -122,3 +122,76 @@ describe('SensorFilter — extra-broadcast safety (fast path vs legacy early-ret
     assert.deepStrictEqual(a.last.cities, ['cityA']);
   });
 });
+
+describe('SensorFilter prefix_matching — one sub-area ending must not end the others', () => {
+  const TLV = 'תל אביב';
+  const EAST = 'תל אביב - מזרח';
+  const SOUTH = 'תל אביב - דרום העיר ויפו';
+
+  function prefixFilter(cities: string[]) {
+    const a = acc();
+    const fired: any[] = [];
+    const f = new SensorFilter('s', logger(), a, cities, allCats, true, { fire: (p: any) => fired.push(p) });
+    return { a, f, fired };
+  }
+
+  it('parent "תל אביב" stays ON while another sub-area is still under alert', () => {
+    // Regression: with prefix matching both sub-areas map to the one key
+    // "תל אביב", so the end of either turned the sensor (and doorbell) off.
+    const { a, f } = prefixFilter([TLV]);
+    f.handleAlerts(alertOf({ [EAST]: OrefCategory.Rockets, [SOUTH]: OrefCategory.Rockets }));
+    assert.strictEqual(a.last.isActive, true);
+    f.handleAlerts(mixed({}, [EAST]));
+    assert.strictEqual(a.last.isActive, true, 'south is still under alert');
+    f.handleAlerts(mixed({}, [SOUTH]));
+    assert.strictEqual(a.last.isActive, false, 'off once every sub-area ended');
+  });
+
+  it('a sub-area that alerted in a later batch is tracked too', () => {
+    const { a, f } = prefixFilter([TLV]);
+    f.handleAlerts(alertOf({ [EAST]: OrefCategory.Rockets }));
+    f.handleAlerts(alertOf({ [SOUTH]: OrefCategory.Rockets }));
+    f.handleAlerts(mixed({}, [SOUTH]));
+    assert.strictEqual(a.last.isActive, true);
+    f.handleAlerts(mixed({}, [EAST]));
+    assert.strictEqual(a.last.isActive, false);
+  });
+
+  it('an end naming the configured city itself ends it at once', () => {
+    const { a, f } = prefixFilter([TLV]);
+    f.handleAlerts(alertOf({ [EAST]: OrefCategory.Rockets, [SOUTH]: OrefCategory.Rockets }));
+    f.handleAlerts(mixed({}, [TLV]));
+    assert.strictEqual(a.last.isActive, false);
+  });
+
+  it('a configured sub-area is not ended by the end of a parent-prefix name it never alerted under', () => {
+    // "אזור" is a real city and a prefix of "אזור תעשייה ..." zones.
+    const { a, f } = prefixFilter(['אזור תעשייה אריאל']);
+    f.handleAlerts(alertOf({ 'אזור תעשייה אריאל': OrefCategory.Rockets }));
+    f.handleAlerts(mixed({}, ['אזור תעשייה אפק ולב הארץ']));
+    assert.strictEqual(a.last.isActive, true, 'a sibling zone ending does not end this one');
+  });
+
+  it('nationwide end still clears everything; nationwide alert is only ended by its own city or nationwide', () => {
+    const { a, f } = prefixFilter([TLV, 'חיפה']);
+    f.handleAlerts(alertOf({ [NATIONWIDE_CITY]: OrefCategory.Rockets }));
+    assert.deepStrictEqual(a.last.cities, ['חיפה', TLV].sort());
+    f.handleAlerts(mixed({}, [EAST]));
+    assert.strictEqual(a.last.isActive, true);
+    f.handleAlerts(mixed({}, ['חיפה']));
+    assert.deepStrictEqual(a.last.cities, [TLV]);
+    f.handleAlerts(mixed({}, [NATIONWIDE_CITY]));
+    assert.strictEqual(a.last.isActive, false);
+  });
+
+  it('emits exactly one ended event, when the last sub-area ends', async () => {
+    const { f, fired } = prefixFilter([TLV]);
+    f.handleAlerts(alertOf({ [EAST]: OrefCategory.Rockets, [SOUTH]: OrefCategory.Rockets }));
+    f.handleAlerts(mixed({}, [EAST]));
+    await new Promise((r) => setImmediate(r));
+    assert.deepStrictEqual(fired.map((p) => p.event), ['alert'], 'no ended (and no doorbell change) while south is on');
+    f.handleAlerts(mixed({}, [SOUTH]));
+    await new Promise((r) => setImmediate(r));
+    assert.deepStrictEqual(fired.map((p) => p.event), ['alert', 'ended']);
+  });
+});

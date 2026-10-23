@@ -57,10 +57,12 @@ function fakeSpawn(probeOutput = ' V....D libx264\n srtp\n') {
   return { spawn, procs, calls };
 }
 
-function frames(): FrameSource & { v: number; frameFor: ReturnType<typeof mock.fn> } {
+function frames(): FrameSource & { v: number; on: boolean; frameFor: ReturnType<typeof mock.fn> } {
   const src = {
     v: 1,
+    on: true,
     version: () => src.v,
+    active: () => src.on,
     frameFor: mock.fn(async (w: number, h: number) => Buffer.from(`v${src.v}:${w}x${h}`)),
   };
   return src;
@@ -95,12 +97,13 @@ describe('FfmpegStillStream', () => {
     }
   });
 
-  function make(opts: { spawn?: SpawnFn; fps?: number; idleTimeoutMs?: number } = {}) {
+  function make(opts: { spawn?: SpawnFn; fps?: number; idleTimeoutMs?: number; endedGraceMs?: number } = {}) {
     const src = frames();
     const { spawn, procs, calls } = fakeSpawn();
     const forceStop = mock.fn();
     const stream = new FfmpegStillStream(logger(), src, () => 1234, {
       ffmpegPath: 'ffmpeg', spawn: opts.spawn ?? spawn, fps: opts.fps, idleTimeoutMs: opts.idleTimeoutMs,
+      endedGraceMs: opts.endedGraceMs,
     });
     stream.attach(forceStop);
     streams.push(stream);
@@ -227,6 +230,28 @@ describe('FfmpegStillStream', () => {
     assert.strictEqual(procs[0].kill.mock.calls[0].arguments[0], 'SIGTERM');
   });
 
+  it('ends the stream a little after the last alert ends', async () => {
+    mock.timers.enable({ apis: ['setInterval', 'Date'] });
+    const { stream, src, forceStop } = make({ fps: 5, endedGraceMs: 1000 });
+    // mock.timers moves Date to the end of a tick() before running timers, so step in ticks.
+    const advance = (ms: number) => {
+      for (let t = 0; t < ms; t += 200) {
+        mock.timers.tick(200);
+      }
+    };
+    await prepare(stream);
+    start(stream);
+    src.on = false;
+    advance(800);
+    assert.strictEqual(forceStop.mock.calls.length, 0, 'viewer still sees the alert clear');
+    src.on = true;
+    advance(2000);
+    assert.strictEqual(forceStop.mock.calls.length, 0, 'a new alert keeps it running');
+    src.on = false;
+    advance(1600);
+    assert.deepStrictEqual(forceStop.mock.calls[0].arguments, ['s1']);
+  });
+
   it('runs two viewers independently', async () => {
     const { stream, procs } = make();
     await prepare(stream, 'a');
@@ -248,9 +273,10 @@ describe('FfmpegStillStream', () => {
 describe('AlertSnapshotDelegate with a stream', () => {
   const renderer = { fallback: Buffer.from('f'), render: async () => Buffer.from('x'), warmUp: async () => {}, destroy: () => {} };
   const notifier = { snapshot: () => ({ version: 0, active: new Map() }) };
+  const alerting = { snapshot: () => ({ version: 1, active: new Map([['Home|A', {}]]) }) };
 
   it('rejects the stream while ffmpeg is unavailable and hands it over once available', () => {
-    const d = new AlertSnapshotDelegate(notifier as any, renderer);
+    const d = new AlertSnapshotDelegate(alerting as any, renderer);
     const stream = { available: false, prepare: mock.fn(), handle: mock.fn() };
     d.stream = stream;
     const cb = mock.fn();
@@ -261,7 +287,17 @@ describe('AlertSnapshotDelegate with a stream', () => {
     assert.strictEqual(stream.prepare.mock.calls.length, 1);
   });
 
-  it('streams the static picture when nothing is active', async () => {
+  it('refuses to stream when no alert is active', () => {
+    const d = new AlertSnapshotDelegate(notifier as any, renderer);
+    const stream = { available: true, prepare: mock.fn(), handle: mock.fn() };
+    d.stream = stream;
+    const cb = mock.fn();
+    d.prepareStream({} as any, cb);
+    assert.match(String(cb.mock.calls[0].arguments[0]), /no active alert/);
+    assert.strictEqual(stream.prepare.mock.calls.length, 0);
+  });
+
+  it('serves the static picture when nothing is active', async () => {
     const d = new AlertSnapshotDelegate(notifier as any, renderer);
     assert.strictEqual(await d.frameFor(640, 360), renderer.fallback);
   });
@@ -280,7 +316,8 @@ describe('FfmpegStillStream with real ffmpeg', { skip: !hasFfmpeg }, () => {
     const packets: Buffer[] = [];
     viewer.on('message', (m) => packets.push(m));
 
-    const stream = new FfmpegStillStream(logger(), { version: () => 1, frameFor: async () => jpeg }, () => 4242, { ffmpegPath: bundled });
+    const source = { version: () => 1, active: () => true, frameFor: async () => jpeg };
+    const stream = new FfmpegStillStream(logger(), source, () => 4242, { ffmpegPath: bundled });
     assert.strictEqual(await stream.probe(), true);
     await new Promise((resolve, reject) => stream.prepare({
       sessionID: 'e2e', targetAddress: '127.0.0.1', addressVersion: 'ipv4',

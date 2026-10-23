@@ -9,6 +9,8 @@ import { DebugLogger } from '../utils/debugLogger';
 /** Where stream frames come from: the current alert card, rendered at the stream's size. */
 export interface FrameSource {
   version(): number;
+  /** True while at least one alert is active; the stream ends a little after the last one. */
+  active(): boolean;
   frameFor(width: number, height: number): Promise<Buffer>;
 }
 
@@ -20,12 +22,15 @@ export interface StillStreamOptions {
   fps?: number;
   /** Stop a session after this long without RTCP from the viewer (it can vanish without STOP). */
   idleTimeoutMs?: number;
+  /** Keep streaming this long after the last alert ends, so the viewer sees it clear. */
+  endedGraceMs?: number;
   spawn?: SpawnFn;
   now?: () => number;
 }
 
 export const STREAM_FPS = 5;
 const IDLE_TIMEOUT_MS = 30000;
+const ENDED_GRACE_MS = 10000;
 const KILL_GRACE_MS = 2000;
 const STDERR_TAIL = 600;
 
@@ -53,6 +58,8 @@ interface Session {
   frameVersion: number;
   pending: boolean;
   lastRtcp: number;
+  /** When the last alert ended while this session was running; 0 while alerts are active. */
+  endedAt: number;
   stderr: string;
   stopping: boolean;
 }
@@ -71,6 +78,7 @@ export class FfmpegStillStream {
   private readonly sessions = new Map<string, Session>();
   private readonly fps: number;
   private readonly idleTimeoutMs: number;
+  private readonly endedGraceMs: number;
   private readonly spawn: SpawnFn;
   private readonly now: () => number;
   private forceStop: (sessionId: string) => void = () => {};
@@ -87,6 +95,7 @@ export class FfmpegStillStream {
     this.ffmpegPath = options.ffmpegPath;
     this.fps = options.fps ?? STREAM_FPS;
     this.idleTimeoutMs = options.idleTimeoutMs ?? IDLE_TIMEOUT_MS;
+    this.endedGraceMs = options.endedGraceMs ?? ENDED_GRACE_MS;
     this.spawn = options.spawn ?? nodeSpawn;
     this.now = options.now ?? Date.now;
   }
@@ -139,6 +148,7 @@ export class FfmpegStillStream {
       frameVersion: -1,
       pending: false,
       lastRtcp: this.now(),
+      endedAt: 0,
       stderr: '',
       stopping: false,
     };
@@ -253,6 +263,15 @@ export class FfmpegStillStream {
   private tick(s: Session, width: number, height: number): void {
     if (this.now() - s.lastRtcp > this.idleTimeoutMs) {
       this.log.easyDebug('[AppleTV] Stream viewer gone, stopping');
+      this.end(s.id, true);
+      return;
+    }
+    if (this.frames.active()) {
+      s.endedAt = 0;
+    } else if (!s.endedAt) {
+      s.endedAt = this.now();
+    } else if (this.now() - s.endedAt > this.endedGraceMs) {
+      this.log.easyDebug('[AppleTV] All alerts ended, stopping stream');
       this.end(s.id, true);
       return;
     }
