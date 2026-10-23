@@ -24,7 +24,7 @@ export interface StillStream {
  *
  * Requests never wait on each other: the same (version, size) shares one cached
  * promise, so a burst of requests after a ring costs one render; the last 4 are
- * kept. With nothing active the static fallback picture is returned at once,
+ * kept. With nothing active the static "no active alerts" picture is returned at once,
  * without touching the renderer.
  */
 export class AlertSnapshotDelegate implements CameraStreamingDelegate {
@@ -39,7 +39,7 @@ export class AlertSnapshotDelegate implements CameraStreamingDelegate {
 
   handleSnapshotRequest(req: SnapshotRequest, cb: SnapshotRequestCallback): void {
     if (this.notifier.snapshot().active.size === 0) {
-      cb(undefined, this.renderer.fallback);
+      cb(undefined, this.renderer.idle);
       return;
     }
     this.snapshotFor(req.width, req.height).then((b) => cb(undefined, b), (e) => cb(e));
@@ -71,10 +71,10 @@ export class AlertSnapshotDelegate implements CameraStreamingDelegate {
     return this.notifier.snapshot().active.size > 0;
   }
 
-  /** The current picture at this size: the alert card, or the static picture when nothing is active. */
+  /** The current picture at this size: the alert card, or the "no active alerts" picture. */
   frameFor(width: number, height: number): Promise<Buffer> {
     if (this.notifier.snapshot().active.size === 0) {
-      return Promise.resolve(this.renderer.fallback);
+      return Promise.resolve(this.renderer.idle);
     }
     return this.snapshotFor(width, height);
   }

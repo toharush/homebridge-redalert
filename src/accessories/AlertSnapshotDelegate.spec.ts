@@ -6,6 +6,7 @@ import { AlertRenderer } from '../render/AlertImageRenderer';
 import { WebhookPayload } from '../services/WebhookService';
 
 const FALLBACK = Buffer.from('fallback');
+const IDLE = Buffer.from('idle');
 
 function source() {
   const state: DoorbellSnapshot & { active: Map<string, WebhookPayload> } = { version: 0, active: new Map() };
@@ -27,6 +28,7 @@ function stubRenderer(impl?: (s: DoorbellSnapshot, w: number, h: number) => Prom
   const render = mock.fn(impl ?? (async (s: DoorbellSnapshot, w: number, h: number) => Buffer.from(`v${s.version}:${w}x${h}`)));
   const renderer: AlertRenderer = {
     fallback: FALLBACK,
+    idle: IDLE,
     render,
     warmUp: async () => {},
     destroy: () => {},
@@ -66,7 +68,7 @@ describe('AlertSnapshotDelegate', () => {
     assert.strictEqual(render.mock.calls.length, 2);
   });
 
-  it('answers immediately with the fallback when nothing is active, without rendering', () => {
+  it('answers immediately with the "no active alerts" picture when nothing is active, without rendering', () => {
     const src = source();
     const { renderer, render } = stubRenderer();
     const d = new AlertSnapshotDelegate(src, renderer);
@@ -74,12 +76,12 @@ describe('AlertSnapshotDelegate', () => {
 
     d.handleSnapshotRequest({ width: 1280, height: 720 } as any, cb);
     assert.strictEqual(cb.mock.calls.length, 1, 'synchronous answer');
-    assert.deepStrictEqual(cb.mock.calls[0].arguments, [undefined, FALLBACK]);
+    assert.deepStrictEqual(cb.mock.calls[0].arguments, [undefined, IDLE]);
 
     src.add('A');
     src.clear();
     d.handleSnapshotRequest({ width: 640, height: 360 } as any, cb);
-    assert.strictEqual(cb.mock.calls[1].arguments[1], FALLBACK);
+    assert.strictEqual(cb.mock.calls[1].arguments[1], IDLE);
     assert.strictEqual(render.mock.calls.length, 0, 'renderer never called');
   });
 

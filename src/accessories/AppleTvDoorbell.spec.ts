@@ -48,7 +48,7 @@ describe('AppleTvDoorbell', () => {
 
   it('builds a video doorbell with a stable UUID and configures the controller', () => {
     const api = createMockAPI();
-    const renderer = { fallback: Buffer.alloc(0), render: mock.fn(), warmUp: mock.fn(), destroy: mock.fn() };
+    const renderer = { fallback: Buffer.alloc(0), idle: Buffer.alloc(0), render: mock.fn(), warmUp: mock.fn(), destroy: mock.fn() };
     tv = new AppleTvDoorbell(createMockLogger(), api, { name: 'Red Alert TV', minRingInterval: 20000, maxCities: 12 }, renderer as any);
 
     assert.strictEqual(tv.accessory.category, hapNodejs.Categories.VIDEO_DOORBELL);
@@ -62,7 +62,7 @@ describe('AppleTvDoorbell', () => {
     const order: string[] = [];
     mock.method(hapNodejs.DoorbellController.prototype, 'ringDoorbell', () => order.push('ring'));
     const renderer: AlertRenderer = {
-      fallback: Buffer.alloc(0),
+      fallback: Buffer.alloc(0), idle: Buffer.alloc(0),
 
       render: mock.fn(() => {
         order.push('render');
@@ -90,7 +90,7 @@ describe('AppleTvDoorbell', () => {
   it('rings again only after the cooldown, however slow rendering is', async () => {
     const ring = mock.method(hapNodejs.DoorbellController.prototype, 'ringDoorbell', () => {});
     const renderer: AlertRenderer = {
-      fallback: Buffer.alloc(0),
+      fallback: Buffer.alloc(0), idle: Buffer.alloc(0),
 
       render: () => new Promise<Buffer>(() => {}),
       warmUp: async () => {},
@@ -105,7 +105,7 @@ describe('AppleTvDoorbell', () => {
   });
 
   it('destroy() stops the renderer', () => {
-    const renderer = { fallback: Buffer.alloc(0), render: mock.fn(), warmUp: mock.fn(), destroy: mock.fn() };
+    const renderer = { fallback: Buffer.alloc(0), idle: Buffer.alloc(0), render: mock.fn(), warmUp: mock.fn(), destroy: mock.fn() };
     const options = { name: 'TV', minRingInterval: 20000, maxCities: 12 };
     const doorbell = new AppleTvDoorbell(createMockLogger(), createMockAPI(), options, renderer as any);
     doorbell.destroy();

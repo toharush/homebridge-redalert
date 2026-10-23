@@ -355,6 +355,12 @@ The picture is also sent as live video. Anything showing the camera live (Apple 
 - It runs only while a device is watching, at 5 frames per second, at a lower priority than Homebridge. The picture is drawn once per change and ffmpeg only turns it into video. Measured on an Apple M3: about 2.4% of one core at 640x360 and 3.5% at 1280x720, about 25–35 MB of RAM per viewer, and 150–550 kbit/s. Expect several times more CPU on a Raspberry Pi.
 - Up to two devices can watch at once (for example the Apple TV and an iPhone).
 - Keep Camera Status on Stream in the Home app.
+- The live view runs only during an alert. When the last alert ends, the camera shows the "no active alerts" picture below, and Home gets no live view until the next alert.
+
+<p align="center">
+  <img src="assets/no-alerts.jpg" alt="Red Alert camera picture when nothing is active: אין התרעות פעילות – המערכת מאזינה להתרעות" width="560">
+  <br><sub>No active alerts: "אין התרעות פעילות – המערכת מאזינה להתרעות" (No active alerts – listening for alerts).</sub>
+</p>
 
 **Live map or fallback picture**
 

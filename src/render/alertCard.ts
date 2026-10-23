@@ -19,6 +19,9 @@ export const COLORS = {
 export const FOOTER_TEXT = '@toharush/homebridge-redalert';
 export const GENERIC_TITLE = 'התרעה';
 export const GENERIC_SUBTITLE = 'בדקו את ההתרעות באזורכם';
+export const IDLE_TITLE = 'אין התרעות פעילות';
+export const IDLE_SUBTITLE = 'המערכת מאזינה להתרעות';
+export const IDLE_ACCENT = '#2DB45A';
 
 interface CategoryStyle {
   title: string;
@@ -86,6 +89,8 @@ export interface CardData {
   maxCities: number;
   /** The static fallback card: alert styling, no cities, no time. */
   generic?: boolean;
+  /** The "no active alerts" card, shown once everything has ended. */
+  idle?: boolean;
 }
 
 /**
@@ -106,7 +111,7 @@ export function toCardData(snapshot: DoorbellSnapshot, maxCities: number): CardD
 }
 
 export interface CardModel {
-  kind: 'alert' | 'generic';
+  kind: 'alert' | 'generic' | 'idle';
   title: string;
   accent: string;
   /** Other active categories, shown in small text under the title. */
@@ -131,6 +136,12 @@ export function formatTime(timestamp: number): string {
 }
 
 export function buildCardModel(data: CardData): CardModel {
+  if (data.idle) {
+    return {
+      kind: 'idle', title: IDLE_TITLE, accent: IDLE_ACCENT, subtitle: IDLE_SUBTITLE,
+      cities: [], maxCities: data.maxCities, time: null,
+    };
+  }
   if (data.generic || data.alerts.length === 0) {
     return {
       kind: 'generic', title: GENERIC_TITLE, accent: COLORS.generic, subtitle: GENERIC_SUBTITLE,

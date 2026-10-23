@@ -97,13 +97,12 @@ describe('FfmpegStillStream', () => {
     }
   });
 
-  function make(opts: { spawn?: SpawnFn; fps?: number; idleTimeoutMs?: number; endedGraceMs?: number } = {}) {
+  function make(opts: { spawn?: SpawnFn; fps?: number; idleTimeoutMs?: number } = {}) {
     const src = frames();
     const { spawn, procs, calls } = fakeSpawn();
     const forceStop = mock.fn();
     const stream = new FfmpegStillStream(logger(), src, () => 1234, {
       ffmpegPath: 'ffmpeg', spawn: opts.spawn ?? spawn, fps: opts.fps, idleTimeoutMs: opts.idleTimeoutMs,
-      endedGraceMs: opts.endedGraceMs,
     });
     stream.attach(forceStop);
     streams.push(stream);
@@ -230,26 +229,24 @@ describe('FfmpegStillStream', () => {
     assert.strictEqual(procs[0].kill.mock.calls[0].arguments[0], 'SIGTERM');
   });
 
-  it('ends the stream a little after the last alert ends', async () => {
+  it('stops the stream shortly after the last alert ends', async () => {
     mock.timers.enable({ apis: ['setInterval', 'Date'] });
-    const { stream, src, forceStop } = make({ fps: 5, endedGraceMs: 1000 });
-    // mock.timers moves Date to the end of a tick() before running timers, so step in ticks.
-    const advance = (ms: number) => {
-      for (let t = 0; t < ms; t += 200) {
-        mock.timers.tick(200);
-      }
-    };
+    const { stream, src, procs, forceStop } = make({ fps: 5 });
     await prepare(stream);
     start(stream);
+    mock.timers.tick(200);
+    assert.strictEqual(forceStop.mock.calls.length, 0, 'runs while an alert is active');
     src.on = false;
-    advance(800);
-    assert.strictEqual(forceStop.mock.calls.length, 0, 'viewer still sees the alert clear');
-    src.on = true;
-    advance(2000);
-    assert.strictEqual(forceStop.mock.calls.length, 0, 'a new alert keeps it running');
-    src.on = false;
-    advance(1600);
+    // mock.timers moves Date to the end of a tick() before running timers, so step in ticks.
+    for (let t = 0; t < 1400; t += 200) {
+      mock.timers.tick(200);
+    }
+    assert.strictEqual(forceStop.mock.calls.length, 0, 'sends the "no active alerts" picture first');
+    for (let t = 0; t < 400; t += 200) {
+      mock.timers.tick(200);
+    }
     assert.deepStrictEqual(forceStop.mock.calls[0].arguments, ['s1']);
+    assert.strictEqual(procs[0].kill.mock.calls[0].arguments[0], 'SIGTERM');
   });
 
   it('runs two viewers independently', async () => {
@@ -271,7 +268,9 @@ describe('FfmpegStillStream', () => {
 });
 
 describe('AlertSnapshotDelegate with a stream', () => {
-  const renderer = { fallback: Buffer.from('f'), render: async () => Buffer.from('x'), warmUp: async () => {}, destroy: () => {} };
+  const renderer = {
+    fallback: Buffer.from('f'), idle: Buffer.from('i'), render: async () => Buffer.from('x'), warmUp: async () => {}, destroy: () => {},
+  };
   const notifier = { snapshot: () => ({ version: 0, active: new Map() }) };
   const alerting = { snapshot: () => ({ version: 1, active: new Map([['Home|A', {}]]) }) };
 
@@ -299,7 +298,7 @@ describe('AlertSnapshotDelegate with a stream', () => {
 
   it('serves the static picture when nothing is active', async () => {
     const d = new AlertSnapshotDelegate(notifier as any, renderer);
-    assert.strictEqual(await d.frameFor(640, 360), renderer.fallback);
+    assert.strictEqual(await d.frameFor(640, 360), renderer.idle);
   });
 });
 

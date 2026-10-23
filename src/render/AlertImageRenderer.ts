@@ -35,8 +35,10 @@ export type WorkerMessage =
 
 /** What the snapshot delegate needs from a renderer; tests inject stubs. */
 export interface AlertRenderer {
-  /** Static card served when nothing is active, a render fails, or canvas isn't available. */
+  /** Static card served when a render fails or canvas isn't available. */
   readonly fallback: Buffer;
+  /** Static "no active alerts" card, served once every alert has ended. */
+  readonly idle: Buffer;
   render(snapshot: DoorbellSnapshot, width: number, height: number): Promise<Buffer>;
   warmUp(): Promise<void>;
   destroy(): void;
@@ -71,6 +73,7 @@ interface Pending {
  */
 export class AlertImageRenderer implements AlertRenderer {
   readonly fallback: Buffer;
+  readonly idle: Buffer;
   private readonly maxCities: number;
   private readonly timeoutMs: number;
   private readonly workerPath: string;
@@ -86,6 +89,8 @@ export class AlertImageRenderer implements AlertRenderer {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.workerPath = options.workerPath ?? WORKER_PATH;
     this.fallback = this.readAsset('fallback-alert.jpg');
+    const idle = this.readAsset('no-alerts.jpg');
+    this.idle = idle.length > 0 ? idle : this.fallback;
   }
 
   /** True once the renderer has given up on canvas and only serves fallbacks. */
@@ -98,7 +103,7 @@ export class AlertImageRenderer implements AlertRenderer {
   }
 
   renderCard(data: CardData, width: number, height: number): Promise<Buffer> {
-    const worker = data.alerts.length > 0 || data.generic ? this.ensureWorker() : null;
+    const worker = data.alerts.length > 0 || data.generic || data.idle ? this.ensureWorker() : null;
     if (!worker) {
       return Promise.resolve(this.fallback);
     }

@@ -25,6 +25,7 @@
     "dist/",
     "assets/fonts/",
     "assets/fallback-alert.jpg",
+    "assets/no-alerts.jpg",
     "config.schema.json",
     "homebridge-ui/",
     "LICENSE",

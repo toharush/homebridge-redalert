@@ -96,10 +96,13 @@ describe('AlertImageRenderer: failure handling (no canvas needed)', () => {
     assert.strictEqual(await r.render(snapshotOf(['A']), 1280, 720), r.fallback, 'no new worker after destroy');
   });
 
-  it('ships the fallback image as a JPEG', () => {
-    const buf = new AlertImageRenderer(createMockLogger(), { maxCities: 12 }).fallback;
-    assert.ok(buf.length > 1000);
-    assert.deepStrictEqual([buf[0], buf[1]], [0xff, 0xd8]);
+  it('ships the fallback and "no active alerts" images as distinct JPEGs', () => {
+    const r = new AlertImageRenderer(createMockLogger(), { maxCities: 12 });
+    for (const buf of [r.fallback, r.idle]) {
+      assert.ok(buf.length > 1000);
+      assert.deepStrictEqual([buf[0], buf[1]], [0xff, 0xd8]);
+    }
+    assert.notDeepStrictEqual(r.idle, r.fallback);
   });
 
   it('never starts a worker for an empty snapshot', async () => {

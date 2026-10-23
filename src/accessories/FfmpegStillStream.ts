@@ -9,7 +9,7 @@ import { DebugLogger } from '../utils/debugLogger';
 /** Where stream frames come from: the current alert card, rendered at the stream's size. */
 export interface FrameSource {
   version(): number;
-  /** True while at least one alert is active; the stream ends a little after the last one. */
+  /** True while at least one alert is active; the stream ends right after the last one does. */
   active(): boolean;
   frameFor(width: number, height: number): Promise<Buffer>;
 }
@@ -22,15 +22,15 @@ export interface StillStreamOptions {
   fps?: number;
   /** Stop a session after this long without RTCP from the viewer (it can vanish without STOP). */
   idleTimeoutMs?: number;
-  /** Keep streaming this long after the last alert ends, so the viewer sees it clear. */
-  endedGraceMs?: number;
   spawn?: SpawnFn;
   now?: () => number;
 }
 
 export const STREAM_FPS = 5;
 const IDLE_TIMEOUT_MS = 30000;
-const ENDED_GRACE_MS = 10000;
+// After the last alert ends, send the "no active alerts" picture this long before
+// stopping, so the frame the Home app keeps on the tile is that one, not the alert.
+const ENDED_GRACE_MS = 1500;
 const KILL_GRACE_MS = 2000;
 const STDERR_TAIL = 600;
 
@@ -78,7 +78,6 @@ export class FfmpegStillStream {
   private readonly sessions = new Map<string, Session>();
   private readonly fps: number;
   private readonly idleTimeoutMs: number;
-  private readonly endedGraceMs: number;
   private readonly spawn: SpawnFn;
   private readonly now: () => number;
   private forceStop: (sessionId: string) => void = () => {};
@@ -95,7 +94,6 @@ export class FfmpegStillStream {
     this.ffmpegPath = options.ffmpegPath;
     this.fps = options.fps ?? STREAM_FPS;
     this.idleTimeoutMs = options.idleTimeoutMs ?? IDLE_TIMEOUT_MS;
-    this.endedGraceMs = options.endedGraceMs ?? ENDED_GRACE_MS;
     this.spawn = options.spawn ?? nodeSpawn;
     this.now = options.now ?? Date.now;
   }
@@ -266,11 +264,12 @@ export class FfmpegStillStream {
       this.end(s.id, true);
       return;
     }
+    // No alert, no stream: after a short "no active alerts" tail, free ffmpeg.
     if (this.frames.active()) {
       s.endedAt = 0;
     } else if (!s.endedAt) {
       s.endedAt = this.now();
-    } else if (this.now() - s.endedAt > this.endedGraceMs) {
+    } else if (this.now() - s.endedAt >= ENDED_GRACE_MS) {
       this.log.easyDebug('[AppleTV] All alerts ended, stopping stream');
       this.end(s.id, true);
       return;

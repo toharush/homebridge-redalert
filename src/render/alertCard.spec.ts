@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
-  CityLocator, GENERIC_TITLE, buildCardModel, buildProjection, categoryStyle, chooseListLayout,
+  CityLocator, GENERIC_TITLE, IDLE_TITLE, buildCardModel, buildProjection, categoryStyle, chooseListLayout,
   fitText, moreLabel, readableAccent, toCardData,
 } from './alertCard';
 import { WebhookPayload } from '../services/WebhookService';
@@ -68,6 +68,13 @@ describe('alertCard: toCardData / buildCardModel', () => {
     assert.strictEqual(model.kind, 'generic');
     assert.strictEqual(model.title, GENERIC_TITLE);
     assert.strictEqual(model.time, null);
+  });
+
+  it('builds the "no active alerts" card', () => {
+    const model = buildCardModel({ version: 0, alerts: [], maxCities: 12, idle: true });
+    assert.strictEqual(model.kind, 'idle');
+    assert.strictEqual(model.title, IDLE_TITLE);
+    assert.deepStrictEqual([model.cities, model.time], [[], null]);
   });
 });
 
