@@ -10,7 +10,9 @@ import {
   originalFetch,
   allCategoryIds,
   TestPipeline,
+  createMockLogger,
 } from './SensorFilter.mock';
+import { SensorFilter, parseAlerts } from './SensorFilter';
 
 // ---------------------------------------------------------------------------
 // SensorFilter tests — every test verifies the full pipeline AND SensorFilter
@@ -392,6 +394,11 @@ describe('SensorFilter: activeCities ↔ accessory state consistency', () => {
   });
 });
 
+// Logs and notifiers run in setImmediate after the HomeKit update.
+function flushNotifications(): Promise<void> {
+  return new Promise((r) => setImmediate(r));
+}
+
 describe('SensorFilter: logging through full pipeline', () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
@@ -401,6 +408,7 @@ describe('SensorFilter: logging through full pipeline', () => {
     const p = new TestPipeline([[ROCKET]]);
     p.addSensor(['פתח תקווה'], allCategoryIds());
     await p.poll();
+    await flushNotifications();
 
     assert.ok(
       p.log.info.mock.calls.some(
@@ -417,6 +425,7 @@ describe('SensorFilter: logging through full pipeline', () => {
     ]);
     p.addSensor(['פתח תקווה'], allCategoryIds());
     await p.pollN(2);
+    await flushNotifications();
 
     assert.ok(
       p.log.info.mock.calls.some((c: any) => c.arguments[0].includes('Event ended')),
@@ -431,6 +440,7 @@ describe('SensorFilter: logging through full pipeline', () => {
     ]);
     p.addSensor(['פתח תקווה'], allCategoryIds());
     await p.pollN(2);
+    await flushNotifications();
 
     const alertLogs = p.log.info.mock.calls.filter(
       (c: any) => c.arguments[0].includes('ALERT') && c.arguments[0].includes('פתח תקווה'),
@@ -499,3 +509,76 @@ describe('SensorFilter: E2E through real AlertService polling', () => {
     assert.strictEqual(noticeSensor.lastState!.isActive, false);
   });
 });
+
+describe('SensorFilter: notifier ordering', () => {
+  const rockets = new Set(CATEGORY_MAP['rockets']);
+
+  function recordingFilter(order: string[], name = 'Home', cities = ['תל אביב - מרכז העיר', 'חיפה - מפרץ']) {
+    const accessory = { updateAlertState: () => order.push(`homekit:${name}`) };
+    const fired: any[] = [];
+    const notifier = {
+      fire: (p: any) => {
+        order.push(`notify:${name}:${p.city}`);
+        fired.push(p);
+      },
+    };
+    const filter = new SensorFilter(name, createMockLogger(), accessory, cities, rockets, false, notifier);
+    return { filter, fired };
+  }
+
+  function salvo(cities: string[]) {
+    return parseAlerts([{ id: '1', cat: '1', title: 'Threat 0', data: cities, desc: '' }]);
+  }
+
+  it('updates HomeKit for every sensor before any notifier fires', async () => {
+    const order: string[] = [];
+    const a = recordingFilter(order, 'A');
+    const b = recordingFilter(order, 'B');
+    const parsed = salvo(['תל אביב - מרכז העיר', 'חיפה - מפרץ']);
+    a.filter.handleAlerts(parsed);
+    b.filter.handleAlerts(parsed);
+
+    assert.deepStrictEqual(order, ['homekit:A', 'homekit:B'], 'nothing is notified synchronously');
+    await flushNotifications();
+    assert.deepStrictEqual(order.slice(0, 2), ['homekit:A', 'homekit:B']);
+    assert.strictEqual(order.length, 6);
+    assert.ok(order.slice(2).every((e) => e.startsWith('notify:')));
+  });
+
+  it('includes the matched category in the alert payload, not in ended', async () => {
+    const order: string[] = [];
+    const { filter, fired } = recordingFilter(order);
+    filter.handleAlerts(salvo(['חיפה - מפרץ']));
+    filter.handleAlerts(parseAlerts([{ id: '2', cat: '99', title: 'האירוע הסתיים', data: ['חיפה - מפרץ'], desc: '' }]));
+    await flushNotifications();
+
+    assert.strictEqual(fired.length, 2);
+    assert.strictEqual(fired[0].event, 'alert');
+    assert.strictEqual(fired[0].category, 1);
+    assert.strictEqual(fired[1].event, 'ended');
+    assert.strictEqual(fired[1].category, undefined);
+  });
+});
+
+describe('SensorFilter: a throwing notifier', () => {
+  it('is logged, does not escape the setImmediate, and does not drop the rest of the batch', async () => {
+    const fired: string[] = [];
+    const notifier = {
+      fire: (p: any) => {
+        fired.push(p.city);
+        if (fired.length === 1) {
+          throw new Error('boom');
+        }
+      },
+    };
+    const log = createMockLogger();
+    const cities = ['תל אביב - מרכז העיר', 'חיפה - מפרץ'];
+    const filter = new SensorFilter('Home', log, { updateAlertState: () => {} }, cities, new Set(CATEGORY_MAP['rockets']), false, notifier);
+    filter.handleAlerts(parseAlerts([{ id: '1', cat: '1', title: 'Threat 0', data: cities, desc: '' }]));
+    await flushNotifications();
+
+    assert.deepStrictEqual(fired.sort(), [...cities].sort());
+    assert.ok(log.warn.mock.calls.some((c: any) => /Notifier failed/.test(c.arguments[0])));
+  });
+});
+

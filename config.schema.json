@@ -236,6 +236,43 @@
         "type": "boolean",
         "default": false
       },
+      "apple_tv_alerts": {
+        "title": "Show Alerts on Apple TV",
+        "description": "Shows a banner with the alert picture (map, alert type, cities, time) on Apple TV over whatever is playing. Works through a HomeKit doorbell, so iPhone, iPad, Mac and Apple Watch also get a notification with the picture, and HomePod may play a doorbell chime (no picture or text; set in the Home app). After enabling: pair \"Red Alert TV\" in the Home app (+ → Add Accessory → More options, bridge PIN), turn on its notifications, and keep Camera Status on Stream.",
+        "type": "boolean",
+        "default": false
+      },
+      "apple_tv_name": {
+        "title": "Doorbell Name",
+        "description": "The name of the doorbell accessory in the Home app.",
+        "type": "string",
+        "default": "Red Alert TV"
+      },
+      "apple_tv_sensors": {
+        "title": "Sensors That Ring the Apple TV",
+        "description": "Sensor names whose alerts ring the doorbell. Leave empty to use all sensors.",
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string"
+        }
+      },
+      "apple_tv_min_ring_interval": {
+        "title": "Minimum Time Between Rings (ms)",
+        "description": "New cities within this time update the picture without ringing again; one more ring follows when it ends. Default 20 seconds.",
+        "type": "number",
+        "default": 20000,
+        "minimum": 5000,
+        "maximum": 600000
+      },
+      "apple_tv_max_cities": {
+        "title": "Cities Shown in the Picture",
+        "description": "Maximum number of city names listed in the picture. The rest are summarized as \"ועוד N\".",
+        "type": "integer",
+        "default": 12,
+        "minimum": 1,
+        "maximum": 20
+      },
       "webhooks": {
         "title": "Webhooks",
         "description": "Send an HTTP request when a sensor activates or deactivates.",
@@ -286,6 +323,19 @@
       "items": [
         "telegram_api_id",
         "telegram_api_hash"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Apple TV Alerts",
+      "description": "Shows alerts on Apple TV as a doorbell banner. After enabling and restarting Homebridge: 1) In the Home app tap + > Add Accessory > More options and pair \"Red Alert TV\" with the bridge PIN (or the child bridge PIN). 2) Open the doorbell's settings and turn notifications on. 3) Keep Camera Status set to Stream (both At Home and Away) - when it is Off, HomeKit shows no picture.",
+      "expandable": true,
+      "items": [
+        "apple_tv_alerts",
+        "apple_tv_name",
+        "apple_tv_sensors",
+        "apple_tv_min_ring_interval",
+        "apple_tv_max_cities"
       ]
     },
     {

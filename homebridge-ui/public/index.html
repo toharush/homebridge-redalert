@@ -386,6 +386,39 @@
       <button type="button" class="btn-secondary" onclick="addWebhook()" style="margin-top:4px;">+ Add Webhook</button>
     </div>
 
+    <h6 style="margin: 16px 0 8px; color: var(--text-muted)">Apple TV (beta)</h6>
+    <div class="field-group">
+      <label><input type="checkbox" id="apple_tv_alerts" /> Show alerts on Apple TV</label>
+      <div class="help-text">
+        Shows a banner with the alert picture (map, alert type, cities, time) on Apple TV over whatever is playing.
+        Works through a HomeKit doorbell, so iPhone, iPad, Mac and Apple Watch also get a notification with the
+        picture, and HomePod may play a doorbell chime (no picture or text; set in the Home app).
+        After saving and restarting Homebridge:
+        1) in the Home app tap + &gt; Add Accessory &gt; More options and pair "Red Alert TV" with the bridge PIN;
+        2) open the doorbell's settings and turn notifications on;
+        3) keep Camera Status set to Stream (At Home and Away) &mdash; when it is Off there is no picture.
+      </div>
+    </div>
+    <div class="field-group">
+      <label>Doorbell Name</label>
+      <input type="text" id="apple_tv_name" placeholder="Red Alert TV" />
+    </div>
+    <div class="field-group">
+      <label>Sensors That Ring the Apple TV</label>
+      <input type="text" id="apple_tv_sensors" placeholder="All sensors" />
+      <div class="help-text">Comma-separated sensor names. Leave empty to use all sensors.</div>
+    </div>
+    <div class="field-group">
+      <label>Minimum Time Between Rings (ms)</label>
+      <input type="number" id="apple_tv_min_ring_interval" min="5000" max="600000" value="20000" />
+      <div class="help-text">New cities within this time update the picture without ringing again. Default: 20000.</div>
+    </div>
+    <div class="field-group">
+      <label>Cities Shown in the Picture</label>
+      <input type="number" id="apple_tv_max_cities" min="1" max="20" value="12" />
+      <div class="help-text">The rest are summarized as "ועוד N". Default: 12.</div>
+    </div>
+
     <h6 style="margin: 16px 0 8px; color: var(--text-muted)">General</h6>
     <div class="field-group">
       <label><input type="checkbox" id="debug" /> Enable Debug Logs</label>
@@ -503,6 +536,11 @@
     document.getElementById("health_check_threshold").value =
       config.health_check_threshold ?? 5;
     document.getElementById("debug").checked = config.debug ?? false;
+    document.getElementById("apple_tv_alerts").checked = config.apple_tv_alerts ?? false;
+    document.getElementById("apple_tv_name").value = config.apple_tv_name ?? "";
+    document.getElementById("apple_tv_sensors").value = (config.apple_tv_sensors || []).join(", ");
+    document.getElementById("apple_tv_min_ring_interval").value = config.apple_tv_min_ring_interval ?? 20000;
+    document.getElementById("apple_tv_max_cities").value = config.apple_tv_max_cities ?? 12;
     document.getElementById("telegram_api_id").value = config.telegram_api_id ?? "";
     document.getElementById("telegram_api_hash").value = config.telegram_api_hash ?? "";
 
@@ -1238,6 +1276,20 @@
     if (webhooks.length > 0) {
       config.webhooks = webhooks;
     }
+
+    // Apple TV settings are kept while the feature is off, so turning it off and
+    // on again doesn't lose the name or sensor list. Defaults aren't written.
+    const tvEnabled = document.getElementById("apple_tv_alerts").checked;
+    if (tvEnabled) config.apple_tv_alerts = true;
+    const tvName = document.getElementById("apple_tv_name").value.trim();
+    if (tvName) config.apple_tv_name = tvName;
+    const tvSensors = document.getElementById("apple_tv_sensors").value
+      .split(",").map((s) => s.trim()).filter(Boolean);
+    if (tvSensors.length > 0) config.apple_tv_sensors = tvSensors;
+    const tvInterval = parseInt(document.getElementById("apple_tv_min_ring_interval").value) || 20000;
+    if (tvEnabled || tvInterval !== 20000) config.apple_tv_min_ring_interval = tvInterval;
+    const tvMaxCities = parseInt(document.getElementById("apple_tv_max_cities").value) || 12;
+    if (tvEnabled || tvMaxCities !== 12) config.apple_tv_max_cities = tvMaxCities;
 
     return config;
   }

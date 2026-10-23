@@ -82,13 +82,14 @@ describe('SensorFilter adversarial — life-safety invariants', () => {
     assert.strictEqual(a.states[2].isActive, false);
   });
 
-  it('repeated identical alert keeps sensor active and fires webhook only once', () => {
+  it('repeated identical alert keeps sensor active and fires webhook only once', async () => {
     const fired: string[] = [];
     const webhook = { fire: (p: any) => fired.push(p.event) } as any;
     const a = acc();
     const f = new SensorFilter('s', logger(), a, ['cityA'], allCats, false, webhook);
     f.handleAlerts(alertOf({ cityA: OrefCategory.Rockets }));
     f.handleAlerts(alertOf({ cityA: OrefCategory.Rockets }));
+    await new Promise((r) => setImmediate(r));
     assert.strictEqual(a.last.isActive, true);
     assert.strictEqual(fired.filter((e) => e === 'alert').length, 1, 'alert webhook fires once for the same active city');
   });

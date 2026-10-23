@@ -1,6 +1,10 @@
 import { Logger, PlatformConfig } from 'homebridge';
 import _ from 'lodash';
 import { SensorConfig } from '../types';
+import {
+  DEFAULT_APPLE_TV_MAX_CITIES, DEFAULT_APPLE_TV_NAME, DEFAULT_APPLE_TV_RING_INTERVAL,
+  MAX_APPLE_TV_MAX_CITIES, MIN_APPLE_TV_RING_INTERVAL,
+} from '../settings';
 
 export interface ValidatedConfig extends PlatformConfig {
   sensors: SensorConfig[];
@@ -17,6 +21,7 @@ export function validateConfig(config: PlatformConfig, log: Logger): ValidatedCo
 
   validateCustomSources(config, log);
   validateWebhooks(config, log);
+  validateAppleTv(config, log);
 
   return config as ValidatedConfig;
 }
@@ -76,5 +81,72 @@ function validateWebhooks(config: PlatformConfig, log: Logger): void {
     if (hook.method && hook.method !== 'POST' && hook.method !== 'PUT') {
       log.warn(`[${label}] Invalid method "${hook.method}" — must be "POST" or "PUT"`);
     }
+  }
+}
+
+export interface AppleTvConfig {
+  name: string;
+  minRingInterval: number;
+  maxCities: number;
+  /** Sensor names that ring the doorbell; empty means every sensor. */
+  sensors: string[];
+}
+
+/** A number setting, or `fallback` when it is missing or blank. NaN when it isn't numeric. */
+function numberSetting(config: PlatformConfig, key: string, fallback: number): number {
+  const raw = _.get(config, key);
+  return _.isNil(raw) || raw === '' ? fallback : _.toNumber(raw);
+}
+
+/**
+ * The Apple TV settings the plugin actually runs with: numbers out of range are
+ * clamped, non-numeric ones fall back to the default, and a sensor list that
+ * isn't a list is ignored. validateAppleTv() warns about each of those.
+ */
+export function resolveAppleTvConfig(config: PlatformConfig): AppleTvConfig {
+  const interval = numberSetting(config, 'apple_tv_min_ring_interval', DEFAULT_APPLE_TV_RING_INTERVAL);
+  const maxCities = numberSetting(config, 'apple_tv_max_cities', DEFAULT_APPLE_TV_MAX_CITIES);
+  const sensors: unknown = _.get(config, 'apple_tv_sensors');
+  return {
+    name: _.trim(_.get(config, 'apple_tv_name')) || DEFAULT_APPLE_TV_NAME,
+    minRingInterval: _.isFinite(interval) ? Math.max(MIN_APPLE_TV_RING_INTERVAL, interval) : DEFAULT_APPLE_TV_RING_INTERVAL,
+    // A fraction would show "ועוד 0.5" in the picture.
+    maxCities: _.isFinite(maxCities) ? _.clamp(Math.floor(maxCities), 1, MAX_APPLE_TV_MAX_CITIES) : DEFAULT_APPLE_TV_MAX_CITIES,
+    sensors: _.isArray(sensors) ? _.filter(sensors, _.isString) : [],
+  };
+}
+
+function validateAppleTv(config: PlatformConfig, log: Logger): void {
+  if (!_.get(config, 'apple_tv_alerts', false)) {
+    return;
+  }
+  const resolved = resolveAppleTvConfig(config);
+
+  const interval = numberSetting(config, 'apple_tv_min_ring_interval', DEFAULT_APPLE_TV_RING_INTERVAL);
+  if (interval !== resolved.minRingInterval) {
+    log.warn(
+      `[AppleTV] apple_tv_min_ring_interval must be a number >= ${MIN_APPLE_TV_RING_INTERVAL}ms — using ${resolved.minRingInterval}ms`,
+    );
+  }
+
+  const maxCities = numberSetting(config, 'apple_tv_max_cities', DEFAULT_APPLE_TV_MAX_CITIES);
+  if (maxCities !== resolved.maxCities) {
+    log.warn(`[AppleTV] apple_tv_max_cities must be a whole number between 1 and ${MAX_APPLE_TV_MAX_CITIES} — using ${resolved.maxCities}`);
+  }
+
+  const tvSensors: unknown = _.get(config, 'apple_tv_sensors', []);
+  if (!_.isArray(tvSensors)) {
+    log.warn('[AppleTV] apple_tv_sensors must be a list of sensor names — ignoring it, every sensor rings the doorbell');
+    return;
+  }
+  const known = new Set(_.map(config.sensors as SensorConfig[], 'name'));
+  const unknown = _.reject(tvSensors, (name) => known.has(name));
+  if (_.isEmpty(unknown)) {
+    return;
+  }
+  if (unknown.length === tvSensors.length) {
+    log.warn(`[AppleTV] apple_tv_sensors has no known sensor names (${unknown.join(', ')}) — the doorbell will never ring`);
+  } else {
+    log.warn(`[AppleTV] apple_tv_sensors has unknown sensor names: ${unknown.join(', ')} — they will be ignored`);
   }
 }

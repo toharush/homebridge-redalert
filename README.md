@@ -21,7 +21,7 @@
 ![License](https://img.shields.io/npm/l/@toharush/homebridge-redalert?style=flat-square)
 ![Last update](https://img.shields.io/npm/last-update/@toharush/homebridge-redalert?style=flat-square)
 
-**[Quick Start](#quick-start)** · **[Features](#why-homebridge-red-alert)** · **[Screenshots](#screenshots)** · **[Automations](#automation-ideas)** · **[Configuration](#configuration)** · **[FAQ](#faq)** · **[עברית](#בעברית)**
+**[Quick Start](#quick-start)** · **[Features](#why-homebridge-red-alert)** · **[Screenshots](#screenshots)** · **[Apple TV](#apple-tv-alerts-beta)** · **[Automations](#automation-ideas)** · **[Configuration](#configuration)** · **[FAQ](#faq)** · **[עברית](#בעברית)**
 
 </div>
 
@@ -30,6 +30,13 @@
 > **The siren sounds. Your lights turn red, the hallway to the shelter (ממ"ד) lights up and your HomePod sounds the alarm – before you even reach your phone.**
 
 Homebridge Red Alert turns every Pikud HaOref (פיקוד העורף) alert into a HomeKit **motion sensor** that switches ON for the cities you choose and OFF when the Home Front Command announces the event has ended. Build any automation you want on top of it.
+
+> 🆕 **New (beta): alerts on your Apple TV.** A live map of the alerted cities pops up over whatever you're watching, and lands on your iPhone, iPad, Mac and Apple Watch too. [See how it works ↓](#apple-tv-alerts-beta)
+
+<p align="center">
+  <img src="assets/readme/apple-tv-rockets.jpg" alt="Red Alert on Apple TV: rockets and missiles alert picture with Tel Aviv area cities highlighted on a map of Israel" width="720">
+  <br><sub>The picture your Apple TV shows when a siren sounds – drawn live at alert time.</sub>
+</p>
 
 <p align="center">
   <img src="branding/screenshots/coverage-map.png" alt="Homebridge Red Alert coverage map: monitored cities per sensor and live pulsing Tzeva Adom alerts" width="900">
@@ -64,6 +71,7 @@ Homebridge Red Alert turns every Pikud HaOref (פיקוד העורף) alert into
 - **Every alert type** – rockets & missiles, hostile UAVs, terrorist infiltration, early warnings, earthquakes, tsunami, hazardous materials, non-conventional threats.
 - **Nationwide alerts handled** – `רחבי הארץ` triggers every configured city, still respecting your alert-type filter.
 - **Automations survive restarts** – accessories keep the same identity, and removed sensors are cleaned up automatically.
+- **Alerts on Apple TV (beta)** – a HomeKit doorbell rings on every alert, so Apple TV shows a banner with a live map of the alerted cities over whatever is playing. Also on iPhone, iPad, Mac and Apple Watch.
 - **Webhooks** – POST/PUT to Home Assistant, Node-RED, n8n or your own server on every alert and every all-clear.
 
 ### ⚙️ A config UI you'll actually enjoy
@@ -81,6 +89,13 @@ Homebridge Red Alert turns every Pikud HaOref (פיקוד העורף) alert into
   <tr>
     <td width="50%"><img src="branding/screenshots/sensor-settings.png" alt="Sensor settings: Hebrew city picker and alert categories"><br><sub><b>Per-sensor settings</b> – pick cities in Hebrew and choose which alert types trigger it.</sub></td>
     <td width="50%"><img src="branding/screenshots/alert-history.png" alt="Alert history with active and ended Red Alert events from Tzofar and Pikud HaOref"><br><sub><b>Alert history</b> – every alert with its source, city and status, filterable.</sub></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/readme/apple-tv-rockets.jpg" alt="Apple TV Red Alert banner picture: rockets and missiles"><br><sub><b>Apple TV – rockets and missiles</b> – the alerted cities glow on the map.</sub></td>
+    <td width="50%"><img src="assets/readme/apple-tv-uav.jpg" alt="Apple TV Red Alert banner picture: hostile aircraft intrusion"><br><sub><b>Apple TV – hostile aircraft</b> – every alert type has its own color.</sub></td>
   </tr>
 </table>
 
@@ -277,11 +292,87 @@ Send an HTTP request when any sensor activates or deactivates. The payload inclu
   "sensor": "Home",
   "city": "תל אביב - מרכז העיר",
   "title": "ירי רקטות וטילים",
-  "timestamp": 1700000000000
+  "timestamp": 1700000000000,
+  "category": 1
 }
 ```
 
-The `event` field is `"alert"` when a sensor activates and `"ended"` when it deactivates. Multiple webhook URLs can be configured — all fire for every sensor event.
+The `event` field is `"alert"` when a sensor activates and `"ended"` when it deactivates. `category` is the Pikud HaOref category ID of the matched alert (see [Available Categories](#available-categories)) and is omitted on `"ended"` events. Multiple webhook URLs can be configured — all fire for every sensor event.
+
+### Apple TV Alerts (Beta)
+
+tvOS has no notification API for plugins, but it does show HomeKit doorbell rings as a banner over whatever is playing. Turn on **Show Alerts on Apple TV** (`apple_tv_alerts`) and the plugin adds a HomeKit video doorbell, "Red Alert TV", that rings on every alert. The banner's picture is drawn at alert time: a map of Israel with the alerted cities highlighted, the alert type in Hebrew, the city names and the time.
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/readme/apple-tv-rockets.jpg" alt="Apple TV alert picture: rockets and missiles, Tel Aviv area cities highlighted on a map of Israel"><br><sub><b>Rockets and missiles</b> – alerted cities glow on the map.</sub></td>
+    <td width="50%"><img src="assets/readme/apple-tv-uav.jpg" alt="Apple TV alert picture: hostile aircraft intrusion, Haifa bay cities highlighted on a map of Israel"><br><sub><b>Hostile aircraft</b> – each alert type has its own color.</sub></td>
+  </tr>
+</table>
+
+Because it works through a HomeKit doorbell:
+
+- **Apple TV** shows a banner with the picture over whatever is playing.
+- **iPhone, iPad, Mac and Apple Watch** get a doorbell notification with the picture.
+- **HomePod** may play a doorbell chime (no picture or text; set it in the Home app).
+
+**Setup**
+
+1. Enable **Show Alerts on Apple TV** in the plugin settings and restart Homebridge.
+2. In the Home app tap **+ → Add Accessory → More options**, pick **Red Alert TV** and enter the bridge PIN (or the child bridge PIN). It is its own accessory, so it is paired separately from the bridge.
+3. Open the doorbell's settings and turn **notifications** on.
+4. Keep **Camera Status** on **Stream** for both At Home and Away. When it is Off, HomeKit shows no picture.
+5. On the Apple TV: same Apple ID and Home, and doorbell notifications on in **Settings → AirPlay and HomeKit**.
+
+```json
+{
+  "platform": "RedAlert",
+  "sensors": [{ "name": "Home", "cities": ["תל אביב - מרכז העיר"] }],
+  "apple_tv_alerts": true
+}
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `apple_tv_alerts` | `false` | Ring a HomeKit video doorbell on every alert, so Apple TV shows a banner with the alert picture |
+| `apple_tv_name` | `"Red Alert TV"` | Doorbell name in the Home app |
+| `apple_tv_sensors` | All sensors | Sensor names whose alerts ring the doorbell |
+| `apple_tv_min_ring_interval` | `20000` | Minimum time (ms) between rings; new cities in between only update the picture (minimum 5,000) |
+| `apple_tv_max_cities` | `12` | City names listed in the picture before "ועוד N" (1–20) |
+
+**How it behaves**
+
+- HomeKit sensors and webhooks are always updated first. The ring follows, and only then is the picture drawn, in a background worker thread, so drawing never delays a sensor, a webhook or the ring.
+- The first new city rings at once. More cities within `apple_tv_min_ring_interval` update the picture without ringing again, and one more ring follows when that time is up. "Event ended" never rings.
+- One doorbell serves all sensors (or the ones in `apple_tv_sensors`); a city reported by two sensors is listed once.
+
+**Live map or fallback picture**
+
+The fallback picture is decided by the Homebridge server, not by the Apple TV. Every Apple TV gets the ring and a picture either way. When the server can't run the drawing library (`@napi-rs/canvas`, installed automatically as an optional dependency), the picture is the static fallback below instead of the live map.
+
+<p align="center">
+  <img src="assets/fallback-alert.jpg" alt="Static fallback Red Alert picture shown on Apple TV when the live map can't be drawn: התרעה – בדקו את ההתרעות באזורכם" width="560">
+  <br><sub>The static fallback picture: "התרעה – בדקו את ההתרעות באזורכם" (Alert – check the alerts in your area).</sub>
+</p>
+
+The library ships builds for these servers, so they get the live picture:
+
+- Raspberry Pi 2, 3, 4, 5 and Zero 2 W, on a 32-bit or 64-bit OS
+- Linux on PC or NAS (x64 or arm64), including Docker and Alpine
+- macOS on Intel or Apple Silicon
+- Windows (x64 or arm64)
+
+These have no build, so they fall back to the static picture:
+
+- Raspberry Pi Zero, Zero W and Pi 1 (armv6)
+- 32-bit x86 Linux or Windows
+- 32-bit ARM Alpine (musl)
+- FreeBSD
+- Any install that skips optional packages, such as `npm install --omit=optional`
+
+**Limits**
+
+- The banner's own text ("Someone is at the door") is set by Apple and can't be changed.
 
 ---
 
@@ -386,6 +477,9 @@ Yes. Every sensor can hold any number of cities, and you can create as many sens
 
 **Does it work if Homebridge runs outside Israel?**
 The Pikud HaOref API may block requests from outside Israel. Tzofar keeps working, and you can add the Mako source from the marketplace, which has no geo-restriction.
+
+**Can I see alerts on my TV?**
+Yes, on Apple TV (beta). Turn on **Show Alerts on Apple TV** and the plugin adds a HomeKit video doorbell that rings on every alert; Apple TV shows it as a banner with a map of the alerted cities over whatever is playing. See [Apple TV Alerts](#apple-tv-alerts-beta).
 
 **Does it cost anything?**
 No. It is free and open source under the MIT license.
@@ -508,6 +602,7 @@ Adding sensors does **not** add API calls — all sensors share the same pipelin
 - בחירת ערים בעברית, מפת כיסוי, היסטוריית התרעות ו-webhooks
 - תרגילים לא מפעילים את החיישן, והחיישן נכבה אוטומטית גם אם כל המקורות לא זמינים
 - בחירה מתוך 1,450 אזורי התרעה, מפת כיסוי חיה ומצב כהה
+- חדש (בטא): התרעות על מסך ה-Apple TV – באנר עם מפה של הערים שבהתרעה, מעל כל מה שמשודר, וגם באייפון, באייפד, במק וב-Apple Watch
 - חינמי וקוד פתוח
 
 **התקנה:** בממשק Homebridge חפשו `red alert` או `pikud haoref` והתקינו את **Red Alert (Pikud HaOref)**, או הריצו:

@@ -1,4 +1,5 @@
 import { DebugLogger } from '../utils/debugLogger';
+import type { AlertNotifier } from './AlertNotifier';
 
 export interface WebhookConfig {
   url: string;
@@ -12,9 +13,11 @@ export interface WebhookPayload {
   city: string;
   title: string;
   timestamp: number;
+  /** OrefCategory of the matched alert. Absent on 'ended' events. */
+  category?: number;
 }
 
-export class WebhookService {
+export class WebhookService implements AlertNotifier {
   private readonly configs: WebhookConfig[];
   private readonly log: DebugLogger;
 

@@ -11,6 +11,10 @@ import { DeduplicationStage } from './DeduplicationStage';
 import { ExpiryStage } from './ExpiryStage';
 import { SensorFilter, ParsedAlerts } from '../services/SensorFilter';
 import { OrefRealtimeAlert, OrefCategory, CATEGORY_MAP } from '../types';
+import { CompositeNotifier } from '../services/AlertNotifier';
+import { WebhookPayload } from '../services/WebhookService';
+import { DoorbellNotifier } from '../notifiers/DoorbellNotifier';
+import { toCardData } from '../render/alertCard';
 import cities from '../data/cities.json';
 
 const CITY_NAMES: string[] = (cities as { name: string }[]).map((c) => c.name);
@@ -136,3 +140,41 @@ for (const cityCount of [1, 3, 10]) {
     run(pool[(n++) & 63]);
   });
 }
+
+// Apple TV doorbell: fire() runs once per new/ended city right after the HomeKit
+// update, so it must stay O(1) however many cities are active. Alternating
+// alert/ended keeps every call on the full path (no early return).
+console.log('\n### Apple TV doorbell notifier (CompositeNotifier → DoorbellNotifier.fire) ###');
+for (const activeCount of [1, 50, 500]) {
+  const doorbell = new DoorbellNotifier(() => {}, 20000);
+  const webhookStub = { fire() {} };
+  const composite = CompositeNotifier.of(webhookStub, doorbell)!;
+  const payloads: WebhookPayload[] = CITY_NAMES.slice(0, activeCount + 1).map((city) => ({
+    event: 'alert', sensor: 'bench', city, title: 't', timestamp: 0, category: 1,
+  }));
+  for (let i = 0; i < activeCount; i++) {
+    composite.fire(payloads[i]);
+  }
+  const extra = payloads[activeCount];
+  const extraEnded: WebhookPayload = { ...extra, event: 'ended' };
+  let n = 0;
+  bench(`fire() with ${activeCount} active`, () => {
+    composite.fire((n++ & 1) ? extraEnded : extra);
+  });
+  doorbell.destroy();
+}
+
+// Main-thread share of a render: flattening the snapshot into card data. The
+// drawing and JPEG encoding run in the render worker.
+console.log('\n### Apple TV card data (main thread, once per render) ###');
+for (const activeCount of [5, 50, 500]) {
+  const doorbell = new DoorbellNotifier(() => {}, 20000);
+  for (const city of CITY_NAMES.slice(0, activeCount)) {
+    doorbell.fire({ event: 'alert', sensor: 'bench', city, title: 't', timestamp: 0, category: 1 });
+  }
+  bench(`toCardData, ${activeCount} active`, () => {
+    toCardData(doorbell.snapshot(), 12);
+  }, 500);
+  doorbell.destroy();
+}
+

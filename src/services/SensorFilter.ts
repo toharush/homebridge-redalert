@@ -1,7 +1,8 @@
 import { OrefRealtimeAlert, AlertState, OrefCategory } from '../types';
 import { DebugLogger } from '../utils/debugLogger';
 import { NATIONWIDE_CITY } from '../settings';
-import { WebhookService } from './WebhookService';
+import { WebhookPayload } from './WebhookService';
+import { AlertNotifier } from './AlertNotifier';
 
 export interface CityAlert {
   categoryId: number;
@@ -58,7 +59,7 @@ export function parseAlerts(alerts: OrefRealtimeAlert[]): ParsedAlerts {
 export class SensorFilter implements AlertListener {
   private readonly citySet: Set<string>;
   private readonly activeCities = new Map<string, number>();
-  private readonly webhook: WebhookService | null;
+  private readonly notifier: AlertNotifier | null;
   private hasBroadcast = false;
 
   constructor(
@@ -68,10 +69,10 @@ export class SensorFilter implements AlertListener {
     cities: string[],
     private readonly allowedCategories: Set<number>,
     private readonly prefixMatching: boolean = false,
-    webhook?: WebhookService,
+    notifier?: AlertNotifier | null,
   ) {
     this.citySet = new Set(cities);
-    this.webhook = webhook ?? null;
+    this.notifier = notifier ?? null;
   }
 
   handleAlerts(parsed: ParsedAlerts): void {
@@ -102,39 +103,34 @@ export class SensorFilter implements AlertListener {
       }
     }
 
+    const events: WebhookPayload[] = [];
     for (const configured of this.citySet) {
       if ((nationwideEnd || this.findMatchInSet(configured, endedCities)) && this.activeCities.delete(configured)) {
-        this.log.info(`[${this.name}] Event ended: ${configured}`);
-        this.webhook?.fire({
-          event: 'ended', sensor: this.name, city: configured, title: 'Event Ended', timestamp: Date.now(),
-        });
+        events.push(ended(this.name, configured));
       }
 
-      const title = nationwideAlert ?? this.findMatchingAlert(configured, relevantCities);
-      if (title) {
+      const match = nationwideAlert ?? this.findMatchingAlert(configured, relevantCities);
+      if (match) {
         const isNew = !this.activeCities.has(configured);
         this.activeCities.set(configured, Date.now());
         if (isNew) {
-          this.log.info(`[${this.name}] ALERT: ${title} - ${configured}`);
-          this.webhook?.fire({
-            event: 'alert', sensor: this.name, city: configured, title, timestamp: Date.now(),
-          });
+          events.push(alerted(this.name, configured, match));
         }
       }
     }
 
     this.broadcastState();
+    this.emit(events);
   }
 
   private handleScoped(endedCities: Set<string>, relevantCities: Map<string, CityAlert[]>): void {
+    const events: WebhookPayload[] = [];
+
     // Event-ended: walk the (small) ended set, not the whole configured set.
     if (endedCities.size > 0) {
       for (const city of endedCities) {
         if (this.citySet.has(city) && this.activeCities.delete(city)) {
-          this.log.info(`[${this.name}] Event ended: ${city}`);
-          this.webhook?.fire({
-            event: 'ended', sensor: this.name, city, title: 'Event Ended', timestamp: Date.now(),
-          });
+          events.push(ended(this.name, city));
         }
       }
     }
@@ -144,23 +140,41 @@ export class SensorFilter implements AlertListener {
       if (!this.citySet.has(city)) {
         continue;
       }
-      const title = this.tryMatchCategory(entries);
-      if (title) {
+      const match = this.tryMatchCategory(entries);
+      if (match) {
         const isNew = !this.activeCities.has(city);
         this.activeCities.set(city, Date.now());
         if (isNew) {
-          this.log.info(`[${this.name}] ALERT: ${title} - ${city}`);
-          this.webhook?.fire({
-            event: 'alert', sensor: this.name, city, title, timestamp: Date.now(),
-          });
+          events.push(alerted(this.name, city, match));
         }
       }
     }
 
     this.broadcastState();
+    this.emit(events);
   }
 
-  private findNationwideAlert(relevantCities: Map<string, CityAlert[]>): string | undefined {
+  // Logging and notifiers run after the HomeKit update, off the hot path, so a
+  // large salvo never delays this sensor or the sensors after it.
+  private emit(events: WebhookPayload[]): void {
+    if (events.length === 0) {
+      return;
+    }
+    setImmediate(() => {
+      for (const e of events) {
+        this.log.info(e.event === 'alert' ? `[${this.name}] ALERT: ${e.title} - ${e.city}` : `[${this.name}] Event ended: ${e.city}`);
+        // This runs in setImmediate: a throw here would be an uncaught exception
+        // (crashing Homebridge) and would drop the rest of the batch.
+        try {
+          this.notifier?.fire(e);
+        } catch (err) {
+          this.log.warn(`[${this.name}] Notifier failed for ${e.city}: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+    });
+  }
+
+  private findNationwideAlert(relevantCities: Map<string, CityAlert[]>): CityAlert | undefined {
     return this.tryMatchCategory(relevantCities.get(NATIONWIDE_CITY));
   }
 
@@ -179,7 +193,7 @@ export class SensorFilter implements AlertListener {
     return false;
   }
 
-  private findMatchingAlert(configured: string, relevantCities: Map<string, CityAlert[]>): string | undefined {
+  private findMatchingAlert(configured: string, relevantCities: Map<string, CityAlert[]>): CityAlert | undefined {
     const exact = this.tryMatchCategory(relevantCities.get(configured));
     if (exact) {
       return exact;
@@ -198,13 +212,13 @@ export class SensorFilter implements AlertListener {
     return undefined;
   }
 
-  private tryMatchCategory(entries: CityAlert[] | undefined): string | undefined {
+  private tryMatchCategory(entries: CityAlert[] | undefined): CityAlert | undefined {
     if (!entries) {
       return undefined;
     }
-    for (const { categoryId, title } of entries) {
-      if (this.allowedCategories.has(categoryId)) {
-        return title || 'Alert';
+    for (const entry of entries) {
+      if (this.allowedCategories.has(entry.categoryId)) {
+        return entry;
       }
     }
     return undefined;
@@ -218,4 +232,14 @@ export class SensorFilter implements AlertListener {
     };
     this.accessory.updateAlertState(state);
   }
+}
+
+function alerted(sensor: string, city: string, match: CityAlert): WebhookPayload {
+  return {
+    event: 'alert', sensor, city, title: match.title || 'Alert', timestamp: Date.now(), category: match.categoryId,
+  };
+}
+
+function ended(sensor: string, city: string): WebhookPayload {
+  return { event: 'ended', sensor, city, title: 'Event Ended', timestamp: Date.now() };
 }
