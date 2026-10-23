@@ -11,9 +11,16 @@ interface SnapshotSource {
   snapshot(): DoorbellSnapshot;
 }
 
+/** The part of FfmpegStillStream the delegate uses. */
+export interface StillStream {
+  readonly available: boolean;
+  prepare(req: PrepareStreamRequest, cb: PrepareStreamCallback): void;
+  handle(req: StreamingRequest, cb: StreamRequestCallback): void;
+}
+
 /**
  * Serves the doorbell's camera snapshot: the alert card for the current set of
- * active alerts. Snapshot-only; the live stream is rejected.
+ * active alerts. The live stream is rejected unless a StillStream is attached.
  *
  * Requests never wait on each other: the same (version, size) shares one cached
  * promise, so a burst of requests after a ring costs one render; the last 4 are
@@ -25,6 +32,9 @@ export class AlertSnapshotDelegate implements CameraStreamingDelegate {
   /** Size of the last alert snapshot HomeKit asked for; prewarm renders that one. */
   private lastSize = { width: 1280, height: 720 };
 
+  /** Optional live stream; without it (or without a working ffmpeg) the camera is snapshot-only. */
+  stream: StillStream | null = null;
+
   constructor(private readonly notifier: SnapshotSource, private readonly renderer: AlertRenderer) {}
 
   handleSnapshotRequest(req: SnapshotRequest, cb: SnapshotRequestCallback): void {
@@ -35,12 +45,33 @@ export class AlertSnapshotDelegate implements CameraStreamingDelegate {
     this.snapshotFor(req.width, req.height).then((b) => cb(undefined, b), (e) => cb(e));
   }
 
-  prepareStream(_req: PrepareStreamRequest, cb: PrepareStreamCallback): void {
+  prepareStream(req: PrepareStreamRequest, cb: PrepareStreamCallback): void {
+    if (this.stream?.available) {
+      this.stream.prepare(req, cb);
+      return;
+    }
     cb(new Error('snapshot-only'));
   }
 
-  handleStreamRequest(_req: StreamingRequest, cb: StreamRequestCallback): void {
+  handleStreamRequest(req: StreamingRequest, cb: StreamRequestCallback): void {
+    if (this.stream) {
+      this.stream.handle(req, cb);
+      return;
+    }
     cb();
+  }
+
+  /** Changes whenever the set of active alerts does; the stream re-renders only then. */
+  version(): number {
+    return this.notifier.snapshot().version;
+  }
+
+  /** The current picture at this size: the alert card, or the static picture when nothing is active. */
+  frameFor(width: number, height: number): Promise<Buffer> {
+    if (this.notifier.snapshot().active.size === 0) {
+      return Promise.resolve(this.renderer.fallback);
+    }
+    return this.snapshotFor(width, height);
   }
 
   /** Starts rendering the current card in the background, so it is ready when HomeKit asks. */

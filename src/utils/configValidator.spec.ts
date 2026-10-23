@@ -92,7 +92,15 @@ describe('validateConfig', () => {
     const resolve = (extra: Record<string, unknown>) => resolveAppleTvConfig({ platform: 'test', ...extra } as any);
 
     it('uses the defaults when nothing is set', () => {
-      assert.deepStrictEqual(resolve({}), { name: 'Red Alert TV', minRingInterval: 20000, maxCities: 12, sensors: [] });
+      assert.deepStrictEqual(resolve({}), {
+        name: 'Red Alert TV', minRingInterval: 20000, maxCities: 12, sensors: [], stream: false, ffmpegPath: '',
+      });
+    });
+
+    it('reads the live stream settings', () => {
+      assert.strictEqual(resolve({ apple_tv_stream: true }).stream, true);
+      assert.strictEqual(resolve({ apple_tv_stream: 'yes' }).stream, false);
+      assert.strictEqual(resolve({ apple_tv_ffmpeg_path: '  /usr/bin/ffmpeg ' }).ffmpegPath, '/usr/bin/ffmpeg');
     });
 
     it('clamps out-of-range numbers, floors fractions and falls back on non-numbers', () => {

@@ -90,6 +90,10 @@ export interface AppleTvConfig {
   maxCities: number;
   /** Sensor names that ring the doorbell; empty means every sensor. */
   sensors: string[];
+  /** Live video stream of the alert card (needs ffmpeg). */
+  stream: boolean;
+  /** Configured ffmpeg binary; empty means auto-detect. */
+  ffmpegPath: string;
 }
 
 /** A number setting, or `fallback` when it is missing or blank. NaN when it isn't numeric. */
@@ -113,6 +117,8 @@ export function resolveAppleTvConfig(config: PlatformConfig): AppleTvConfig {
     // A fraction would show "ועוד 0.5" in the picture.
     maxCities: _.isFinite(maxCities) ? _.clamp(Math.floor(maxCities), 1, MAX_APPLE_TV_MAX_CITIES) : DEFAULT_APPLE_TV_MAX_CITIES,
     sensors: _.isArray(sensors) ? _.filter(sensors, _.isString) : [],
+    stream: _.get(config, 'apple_tv_stream', false) === true,
+    ffmpegPath: _.trim(_.get(config, 'apple_tv_ffmpeg_path')),
   };
 }
 

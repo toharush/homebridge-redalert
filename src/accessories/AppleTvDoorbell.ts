@@ -4,11 +4,14 @@ import { PLATFORM_NAME } from '../settings';
 import { DoorbellNotifier } from '../notifiers/DoorbellNotifier';
 import { AlertImageRenderer, AlertRenderer } from '../render/AlertImageRenderer';
 import { AlertSnapshotDelegate } from './AlertSnapshotDelegate';
+import { FfmpegStillStream } from './FfmpegStillStream';
 
 export interface AppleTvDoorbellOptions {
   name: string;
   minRingInterval: number;
   maxCities: number;
+  /** ffmpeg binary for the live stream; null keeps the camera snapshot-only. */
+  ffmpegPath?: string | null;
 }
 
 /**
@@ -27,6 +30,7 @@ export class AppleTvDoorbell {
   private readonly controller: DoorbellController;
   private readonly delegate: AlertSnapshotDelegate;
   private readonly renderer: AlertRenderer;
+  private readonly stream: FfmpegStillStream | null = null;
 
   constructor(
     private readonly log: DebugLogger,
@@ -39,10 +43,18 @@ export class AppleTvDoorbell {
 
     this.notifier = new DoorbellNotifier(() => this.ring(), options.minRingInterval);
     this.delegate = new AlertSnapshotDelegate(this.notifier, this.renderer);
+    if (options.ffmpegPath) {
+      this.stream = new FfmpegStillStream(
+        log, this.delegate, () => hap.CameraController.generateSynchronisationSource(),
+        { ffmpegPath: options.ffmpegPath },
+      );
+      this.delegate.stream = this.stream;
+    }
 
-    // streamingOptions are required even though the stream is always rejected.
+    // streamingOptions are required even when the stream is rejected.
     this.controller = new hap.DoorbellController({
-      cameraStreamCount: 1,
+      // Two viewers at once (Apple TV and a phone), each with its own ffmpeg.
+      cameraStreamCount: this.stream ? 2 : 1,
       delegate: this.delegate,
       streamingOptions: {
         supportedCryptoSuites: [hap.SRTPCryptoSuites.AES_CM_128_HMAC_SHA1_80],
@@ -66,14 +78,18 @@ export class AppleTvDoorbell {
       .setCharacteristic(hap.Characteristic.Model, 'Red Alert TV Doorbell')
       .setCharacteristic(hap.Characteristic.SerialNumber, 'RA-APPLETV-DOORBELL');
     this.accessory.configureController(this.controller);
+    const controller = this.controller;
+    this.stream?.attach((id) => controller.forceStopStreamingSession(id));
   }
 
-  /** Loads canvas and fonts in the worker now, so the first alert doesn't pay for it. */
+  /** Loads canvas and fonts in the worker now, and checks ffmpeg, so the first alert doesn't pay for it. */
   warmUp(): void {
     void this.renderer.warmUp();
+    void this.stream?.probe();
   }
 
   destroy(): void {
+    this.stream?.destroy();
     this.notifier.destroy();
     this.renderer.destroy();
   }

@@ -179,7 +179,7 @@
               "title": "Fallback Category (Telegram)",
               "description": "Default alert category when no keyword is detected in the message header. Only used for Telegram sources.",
               "type": "string",
-              "enum": ["rockets", "uav", "nonconventional", "warning", "earthquake", "cbrne", "terror", "tsunami", "hazmat"],
+              "enum": ["rockets", "uav", "nonconventional", "warning", "earthquake", "cbrne", "terror", "tsunami", "hazmat", "eventended"],
               "default": "rockets"
             },
             "headers": {
@@ -273,6 +273,18 @@
         "minimum": 1,
         "maximum": 20
       },
+      "apple_tv_stream": {
+        "title": "Live Picture (Video Stream)",
+        "description": "Sends the alert picture as a live video while a device is showing the camera (Apple TV picture-in-picture, Home app camera view), so new cities and ended alerts appear without a new ring. ffmpeg is installed together with the plugin. Uses about 4-12% of one Raspberry Pi 4 core, only while someone is watching. If ffmpeg can't run, the doorbell stays picture-only.",
+        "type": "boolean",
+        "default": false
+      },
+      "apple_tv_ffmpeg_path": {
+        "title": "ffmpeg Path",
+        "description": "Optional. Leave empty to use the ffmpeg installed with the plugin. Set only to use a different ffmpeg build.",
+        "type": "string",
+        "placeholder": "ffmpeg"
+      },
       "webhooks": {
         "title": "Webhooks",
         "description": "Send an HTTP request when a sensor activates or deactivates.",
@@ -335,7 +347,9 @@
         "apple_tv_name",
         "apple_tv_sensors",
         "apple_tv_min_ring_interval",
-        "apple_tv_max_cities"
+        "apple_tv_max_cities",
+        "apple_tv_stream",
+        "apple_tv_ffmpeg_path"
       ]
     },
     {

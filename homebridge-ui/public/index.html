@@ -418,6 +418,15 @@
       <input type="number" id="apple_tv_max_cities" min="1" max="20" value="12" />
       <div class="help-text">The rest are summarized as "ועוד N". Default: 12.</div>
     </div>
+    <div class="field-group">
+      <label><input type="checkbox" id="apple_tv_stream" /> Live Picture (Video Stream)</label>
+      <div class="help-text">Updates the picture live while a device shows the camera (new cities, ended alerts). ffmpeg is installed with the plugin; uses CPU only while someone is watching.</div>
+    </div>
+    <div class="field-group">
+      <label>ffmpeg Path</label>
+      <input type="text" id="apple_tv_ffmpeg_path" placeholder="ffmpeg" />
+      <div class="help-text">Optional. Leave empty to use the ffmpeg installed with the plugin.</div>
+    </div>
 
     <h6 style="margin: 16px 0 8px; color: var(--text-muted)">General</h6>
     <div class="field-group">
@@ -474,6 +483,8 @@
   ];
 
   const CATEGORY_KEYS = CATEGORIES.map((c) => c.key);
+  // Custom source mappings can also mark a source's own "event ended" code.
+  const MAPPING_CATEGORIES = [...CATEGORIES, { key: "eventended", label: "Event Ended (האירוע הסתיים)" }];
 
   async function init() {
     homebridge.showSpinner();
@@ -541,6 +552,8 @@
     document.getElementById("apple_tv_sensors").value = (config.apple_tv_sensors || []).join(", ");
     document.getElementById("apple_tv_min_ring_interval").value = config.apple_tv_min_ring_interval ?? 20000;
     document.getElementById("apple_tv_max_cities").value = config.apple_tv_max_cities ?? 12;
+    document.getElementById("apple_tv_stream").checked = config.apple_tv_stream ?? false;
+    document.getElementById("apple_tv_ffmpeg_path").value = config.apple_tv_ffmpeg_path ?? "";
     document.getElementById("telegram_api_id").value = config.telegram_api_id ?? "";
     document.getElementById("telegram_api_hash").value = config.telegram_api_hash ?? "";
 
@@ -618,7 +631,7 @@
                   <input type="text" class="catmap-key" value="${escapeHtml(k)}" placeholder="ID value (e.g. 1, ROCKET)" style="flex:1;padding:4px 8px;border-radius:4px;">
                   <span style="color:var(--text-muted);">&#8594;</span>
                   <select class="catmap-value" style="flex:1;padding:4px 8px;border-radius:4px;">
-                    ${CATEGORIES.map((c) => `<option value="${c.key}" ${v === c.key ? "selected" : ""}>${c.label}</option>`).join("")}
+                    ${MAPPING_CATEGORIES.map((c) => `<option value="${c.key}" ${v === c.key ? "selected" : ""}>${c.label}</option>`).join("")}
                   </select>
                   <button type="button" onclick="this.parentElement.remove();updateCatmapOptions(this.closest('.category-mapping-rows'));syncConfig();" style="background:var(--accent-red);color:white;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;">&#215;</button>
                 </div>
@@ -941,7 +954,7 @@
       if (!sel) return;
       const current = sel.value;
       const used = getUsedCategories(container, row);
-      sel.innerHTML = CATEGORIES
+      sel.innerHTML = MAPPING_CATEGORIES
         .filter((c) => c.key === current || !used.has(c.key))
         .map((c) => `<option value="${c.key}" ${c.key === current ? "selected" : ""}>${c.label}</option>`)
         .join("");
@@ -949,14 +962,14 @@
     const addonId = container.id.replace("catmap-", "");
     const addBtn = document.getElementById(`addmap-btn-${addonId}`);
     if (addBtn) {
-      addBtn.style.display = allUsed.size >= CATEGORIES.length ? "none" : "";
+      addBtn.style.display = allUsed.size >= MAPPING_CATEGORIES.length ? "none" : "";
     }
   }
 
   function addCatmapRow(addonId) {
     const container = document.getElementById(`catmap-${addonId}`);
     const used = getUsedCategories(container, null);
-    const available = CATEGORIES.filter((c) => !used.has(c.key));
+    const available = MAPPING_CATEGORIES.filter((c) => !used.has(c.key));
     if (available.length === 0) return;
     const row = document.createElement("div");
     row.className = "catmap-row";
@@ -1290,6 +1303,9 @@
     if (tvEnabled || tvInterval !== 20000) config.apple_tv_min_ring_interval = tvInterval;
     const tvMaxCities = parseInt(document.getElementById("apple_tv_max_cities").value) || 12;
     if (tvEnabled || tvMaxCities !== 12) config.apple_tv_max_cities = tvMaxCities;
+    if (document.getElementById("apple_tv_stream").checked) config.apple_tv_stream = true;
+    const tvFfmpeg = document.getElementById("apple_tv_ffmpeg_path").value.trim();
+    if (tvFfmpeg) config.apple_tv_ffmpeg_path = tvFfmpeg;
 
     return config;
   }

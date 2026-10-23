@@ -4,7 +4,10 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-const PORT = 3100;
+const PORT = Number(process.env.MOCK_PORT) || 3100;
+// How long /alerts keeps serving the "event ended" entry after an alert ends, so
+// HTTP pollers (even slow ones) see the all-clear, as they would from Oref.
+const ENDED_TTL_MS = Number(process.env.MOCK_ENDED_TTL_MS) || 60000;
 
 function getLanIp(): string {
   const interfaces = os.networkInterfaces();
@@ -36,6 +39,8 @@ const CATEGORIES: Record<string, { threat: number; orefCat: number; title: strin
 const wsClients = new Set<WebSocket>();
 type DeliveryMode = 'both' | 'http' | 'ws';
 let activeAlert: { cities: string[]; category: string; mode: DeliveryMode; timeout: ReturnType<typeof setTimeout> } | null = null;
+/** Oref-style all-clear served on /alerts after an HTTP alert ends (Oref: cat 10 + "האירוע הסתיים"). */
+let endedAlert: { id: string; cities: string[]; until: number } | null = null;
 
 const server = http.createServer((req, res) => {
   if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
@@ -47,6 +52,11 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/alerts') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     if (!activeAlert || activeAlert.mode === 'ws') {
+      if (endedAlert && Date.now() < endedAlert.until) {
+        res.end(JSON.stringify([{ id: endedAlert.id, cat: '10', title: 'האירוע הסתיים', data: endedAlert.cities, desc: '' }]));
+        return;
+      }
+      endedAlert = null;
       res.end('[]');
       return;
     }
@@ -150,6 +160,7 @@ function fireAlert(cityNames: string[], categoryKey: string, durationMs: number,
 
   const timeout = setTimeout(() => endAlert(cityNames, mode), durationMs);
   activeAlert = { cities: cityNames, category: categoryKey, mode, timeout };
+  endedAlert = null;
 
   if (mode === 'ws' || mode === 'both') {
     broadcast([{
@@ -168,7 +179,14 @@ function fireAlert(cityNames: string[], categoryKey: string, durationMs: number,
 }
 
 function endAlert(cityNames: string[], mode: DeliveryMode = 'both') {
+  if (activeAlert) {
+    clearTimeout(activeAlert.timeout);
+  }
   activeAlert = null;
+
+  if (mode === 'http' || mode === 'both') {
+    endedAlert = { id: 'mock-end-' + Date.now(), cities: cityNames, until: Date.now() + ENDED_TTL_MS };
+  }
 
   if (mode === 'ws' || mode === 'both') {
     broadcast([{

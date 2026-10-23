@@ -339,12 +339,23 @@ Because it works through a HomeKit doorbell:
 | `apple_tv_sensors` | All sensors | Sensor names whose alerts ring the doorbell |
 | `apple_tv_min_ring_interval` | `20000` | Minimum time (ms) between rings; new cities in between only update the picture (minimum 5,000) |
 | `apple_tv_max_cities` | `12` | City names listed in the picture before "ועוד N" (1–20) |
+| `apple_tv_stream` | `false` | Live picture: send the alert picture as video while a device shows the camera, so new cities and ended alerts appear without a new ring |
+| `apple_tv_ffmpeg_path` | Bundled | ffmpeg to use for the live picture; leave empty for the ffmpeg installed with the plugin |
 
 **How it behaves**
 
 - HomeKit sensors and webhooks are always updated first. The ring follows, and only then is the picture drawn, in a background worker thread, so drawing never delays a sensor, a webhook or the ring.
 - The first new city rings at once. More cities within `apple_tv_min_ring_interval` update the picture without ringing again, and one more ring follows when that time is up. "Event ended" never rings.
 - One doorbell serves all sensors (or the ones in `apple_tv_sensors`); a city reported by two sensors is listed once.
+
+**Live picture (beta)**
+
+Without it, Apple takes the picture once, when the doorbell rings, so a city added later or an alert that ends doesn't show until the next ring. With `apple_tv_stream` on, anything showing the camera live (Apple TV picture-in-picture, the Home app camera view, a long-pressed iPhone notification) updates within about a second. The iPhone banner and lock-screen thumbnail still keep the picture from the ring; that is Apple's behavior.
+
+- ffmpeg comes with the plugin (`ffmpeg-for-homebridge`, an optional dependency), including in Docker. If it can't run, the plugin logs one warning and the doorbell stays picture-only.
+- It runs only while a device is watching, at 5 frames per second, at a lower priority than Homebridge. The picture is drawn once per change and ffmpeg only turns it into video. Measured on an Apple M3: about 2.4% of one core at 640x360 and 3.5% at 1280x720, about 25–35 MB of RAM per viewer, and 150–550 kbit/s. Expect several times more CPU on a Raspberry Pi.
+- Up to two devices can watch at once (for example the Apple TV and an iPhone).
+- Keep Camera Status on Stream in the Home app.
 
 **Live map or fallback picture**
 

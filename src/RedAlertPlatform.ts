@@ -24,6 +24,7 @@ import { parseTzofarMessage, loadTzofarCityMap } from './clients/tzofarParser';
 import { MotionSensorAccessory } from './accessories/MotionSensorAccessory';
 import { HealthCheckAccessory } from './accessories/HealthCheckAccessory';
 import { AppleTvDoorbell } from './accessories/AppleTvDoorbell';
+import { resolveFfmpegPath } from './accessories/FfmpegStillStream';
 import { migrateConfig } from './utils/migrationHelper';
 import { TelegramSource, SharedTelegramClient, createSharedTelegramClient } from './clients/telegramSource';
 import { buildCityIndex } from './clients/telegramParser';
@@ -171,8 +172,10 @@ export class RedAlertPlatform implements DynamicPlatformPlugin {
     if (!_.get(this.config, 'apple_tv_alerts', false)) {
       return null;
     }
-    const { name, minRingInterval, maxCities } = resolveAppleTvConfig(this.config);
-    this.tv = new AppleTvDoorbell(this.log, this.api, { name, minRingInterval, maxCities });
+    const { name, minRingInterval, maxCities, stream, ffmpegPath } = resolveAppleTvConfig(this.config);
+    this.tv = new AppleTvDoorbell(this.log, this.api, {
+      name, minRingInterval, maxCities, ffmpegPath: stream ? resolveFfmpegPath(ffmpegPath) : null,
+    });
     return this.tv;
   }
 
