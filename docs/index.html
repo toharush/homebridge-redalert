@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Homebridge Red Alert – Pikud HaOref Tzeva Adom alerts for HomeKit | צבע אדום</title>
+<meta name="description" content="Homebridge Red Alert (homebridge-redalert) turns Israel's Pikud HaOref / Home Front Command Red Alert (Tzeva Adom, צבע אדום) into HomeKit motion sensors. Rockets, missiles, UAVs, terror and earthquake alerts for your city. Free, open source, Homebridge Verified.">
+<meta name="keywords" content="homebridge red alert, homebridge-redalert, homebridge redalert, red alert homekit, pikud haoref homekit, tzeva adom homekit, home front command alerts, צבע אדום, פיקוד העורף, התרעות פיקוד העורף בית חכם, homebridge plugin israel">
+<link rel="canonical" href="https://toharush.github.io/homebridge-redalert/">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#E3231C">
+<link rel="icon" type="image/png" href="assets/plugin-icon.png">
+<link rel="apple-touch-icon" href="assets/plugin-icon.png">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Homebridge Red Alert – Tzeva Adom alerts in HomeKit">
+<meta property="og:description" content="Pikud HaOref Red Alert (צבע אדום) as HomeKit sensors. Turn the lights red, light the way to the shelter, sound the HomePod.">
+<meta property="og:url" content="https://toharush.github.io/homebridge-redalert/">
+<meta property="og:image" content="https://toharush.github.io/homebridge-redalert/assets/coverage-map.png">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="he_IL">
+<meta name="twitter:card" content="summary_large_image">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Homebridge Red Alert",
+      "alternateName": ["homebridge-redalert", "@toharush/homebridge-redalert", "Homebridge RedAlert", "Red Alert (Pikud HaOref)", "צבע אדום ל-HomeKit"],
+      "description": "Homebridge plugin that turns Israel Pikud HaOref (Home Front Command) Red Alert / Tzeva Adom alerts into HomeKit motion sensors.",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "Homebridge (Node.js 22, 24, 25)",
+      "url": "https://toharush.github.io/homebridge-redalert/",
+      "downloadUrl": "https://www.npmjs.com/package/@toharush/homebridge-redalert",
+      "codeRepository": "https://github.com/toharush/homebridge-redalert",
+      "license": "https://opensource.org/licenses/MIT",
+      "inLanguage": ["en", "he"],
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "author": { "@type": "Person", "name": "Tohar Harush", "url": "https://github.com/toharush" },
+      "sameAs": ["https://github.com/toharush/homebridge-redalert", "https://www.npmjs.com/package/@toharush/homebridge-redalert"]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": "Is Homebridge Red Alert an official Pikud HaOref app?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. It is a community Homebridge plugin that reads the public Pikud HaOref alert feed and other public sources. Keep the official Home Front Command app and sirens as your primary warning." } },
+        { "@type": "Question", "name": "How fast are the alerts?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Tzofar pushes alerts over a WebSocket in about 50 ms and Pikud HaOref is polled every second. Whichever reports first triggers the sensor." } },
+        { "@type": "Question", "name": "Is it the same as the homebridge-redalert package without @toharush?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. The unscoped homebridge-redalert npm package is an unrelated plugin from 2021. This plugin is @toharush/homebridge-redalert and is Homebridge Verified." } },
+        { "@type": "Question", "name": "Does it work if Homebridge runs outside Israel?",
+          "acceptedAnswer": { "@type": "Answer", "text": "The Pikud HaOref API may block requests from outside Israel. Tzofar keeps working, and the Mako source from the marketplace has no geo-restriction." } },
+        { "@type": "Question", "name": "Does it cost anything?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. It is free and open source under the MIT license." } }
+      ]
+    }
+  ]
+}
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --siren: #E3231C;
+  --siren-deep: #B5160F;
+  --amber: #F2A516;
+  --purple: #491F59;
+  --concrete: #E9ECEE;
+  --paper: #F7F8F9;
+  --ink: #1A1F24;
+  --ink-soft: #4F5963;
+  --line: #CDD3D8;
+  --tile: #FFFFFF;
+  --tile-off: #DDE2E6;
+  --phone: #2A3038;
+  --code-bg: #1A1F24;
+  --code-ink: #F2F4F5;
+  --link: #B5160F;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --siren: #FF4A3D;
+    --siren-deep: #E3231C;
+    --amber: #F7B83A;
+    --purple: #B98BCB;
+    --concrete: #1E2329;
+    --paper: #161A1F;
+    --ink: #ECEFF1;
+    --ink-soft: #A7B0B8;
+    --line: #353C45;
+    --tile: #2A3038;
+    --tile-off: #232930;
+    --phone: #0F1216;
+    --code-bg: #0F1216;
+    --code-ink: #ECEFF1;
+    --link: #FF7A70;
+  }
+}
+:root[data-theme="dark"] {
+  --siren: #FF4A3D; --siren-deep: #E3231C; --amber: #F7B83A; --purple: #B98BCB;
+  --concrete: #1E2329; --paper: #161A1F; --ink: #ECEFF1; --ink-soft: #A7B0B8;
+  --line: #353C45; --tile: #2A3038; --tile-off: #232930; --phone: #0F1216;
+  --code-bg: #0F1216; --code-ink: #ECEFF1; --link: #FF7A70;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Rubik", system-ui, sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--link); text-underline-offset: 0.18em; }
+a:focus-visible, button:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--amber);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9em; }
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+@media (min-width: 720px) { .wrap { padding: 0 32px; } }
+
+/* Top bar */
+.top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding-top: 20px; padding-bottom: 20px;
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--ink); text-decoration: none; }
+.brand img { width: 32px; height: 32px; border-radius: 8px; }
+.top nav { display: flex; gap: 20px; font-size: 0.95rem; }
+.top nav a { color: var(--ink-soft); text-decoration: none; }
+.top nav a:hover { color: var(--ink); }
+@media (max-width: 560px) { .top nav .hide-sm { display: none; } }
+
+/* Hero */
+.hero {
+  display: grid; gap: 48px; align-items: center;
+  padding-top: 32px; padding-bottom: 72px;
+}
+@media (min-width: 900px) { .hero { grid-template-columns: 1.05fr 0.95fr; padding-top: 56px; padding-bottom: 104px; } }
+.hero h1 {
+  font-size: clamp(2.6rem, 6.4vw, 4.6rem);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+.hero .he-title {
+  font-size: clamp(1.7rem, 3.8vw, 2.6rem);
+  font-weight: 500;
+  line-height: 1.15;
+  color: var(--siren);
+  margin: 0 0 28px;
+  width: fit-content;
+  max-width: 100%;
+}
+.nowrap { white-space: nowrap; }
+.hero .lede { font-size: 1.25rem; line-height: 1.5; color: var(--ink-soft); max-width: 34ch; margin: 0 0 32px; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 13px 22px; border-radius: 999px;
+  font: inherit; font-weight: 500; font-size: 1rem;
+  text-decoration: none; cursor: pointer; border: 2px solid transparent;
+}
+.btn-primary { background: var(--siren); color: #fff !important; }
+.btn-primary:hover { background: var(--siren-deep); }
+.btn-ghost { border-color: var(--line); color: var(--ink) !important; background: transparent; }
+.btn-ghost:hover { border-color: var(--ink-soft); }
+.btn svg { width: 18px; height: 18px; fill: currentColor; }
+.verified { margin-top: 24px; font-size: 0.95rem; color: var(--ink-soft); }
+.verified strong { color: var(--purple); font-weight: 500; }
+
+/* The phone */
+.phone-col { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.phone {
+  width: min(100%, 360px);
+  background: var(--phone);
+  border-radius: 44px;
+  padding: 14px;
+  box-shadow: 0 30px 60px -30px rgba(26, 31, 36, 0.55);
+}
+.screen {
+  background: var(--concrete);
+  border-radius: 32px;
+  padding: 26px 18px 22px;
+  transition: background-color 600ms ease;
+}
+.screen-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+.screen-head b { font-size: 1.6rem; letter-spacing: -0.02em; }
+.screen-head span { font-size: 0.8rem; color: var(--ink-soft); }
+.status-line { font-size: 0.85rem; color: var(--ink-soft); margin: 0 0 18px; min-height: 1.4em; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tile {
+  background: var(--tile-off);
+  border-radius: 16px;
+  padding: 12px;
+  min-height: 92px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  transition: background-color 380ms ease, color 380ms ease, transform 380ms ease;
+}
+.tile svg { width: 26px; height: 26px; fill: var(--ink-soft); transition: fill 380ms ease; }
+.tile .name { font-size: 0.82rem; font-weight: 500; line-height: 1.2; }
+.tile .state { font-size: 0.76rem; color: var(--ink-soft); transition: color 380ms ease; }
+.tile.sensor { grid-column: 1 / -1; min-height: 0; flex-direction: row; align-items: center; gap: 12px; justify-content: flex-start; }
+.tile.sensor .txt { display: flex; flex-direction: column; }
+.tile.sensor .name { font-size: 0.95rem; }
+
+.alerting .screen { background: color-mix(in srgb, var(--siren) 14%, var(--concrete)); }
+.alerting .tile.sensor { background: var(--siren); color: #fff; }
+.alerting .tile.sensor svg, .alerting .tile.sensor .state { fill: #fff; color: #fff; }
+.alerting .tile.lit { background: var(--tile); }
+.alerting .tile.lit svg { fill: var(--siren); }
+.alerting .tile.lit .state { color: var(--siren-deep); }
+.alerting .tile.lit.amber svg { fill: var(--amber); }
+.alerting .tile:nth-child(2) { transition-delay: 260ms; }
+.alerting .tile:nth-child(3) { transition-delay: 400ms; }
+.alerting .tile:nth-child(4) { transition-delay: 540ms; }
+.alerting .tile:nth-child(5) { transition-delay: 680ms; }
+.alerting .tile.sensor { transform: scale(1.02); }
+
+.replay {
+  background: none; border: 0; color: var(--ink-soft);
+  font: inherit; font-size: 0.9rem; cursor: pointer; padding: 6px 10px;
+  text-decoration: underline; text-underline-offset: 0.2em;
+}
+.replay:hover { color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .screen, .tile, .tile svg, .tile .state { transition: none !important; }
+  .alerting .tile.sensor { transform: none; }
+}
+
+/* Sections */
+section { padding: 72px 0; }
+section + section { border-top: 1px solid var(--line); }
+.band { background: var(--concrete); }
+h2 {
+  font-size: clamp(1.8rem, 3.6vw, 2.5rem);
+  line-height: 1.1; letter-spacing: -0.025em; font-weight: 700;
+  margin: 0 0 16px; max-width: 22ch;
+}
+h3 { font-size: 1.15rem; margin: 0 0 6px; font-weight: 700; }
+.intro { color: var(--ink-soft); max-width: 62ch; margin: 0 0 40px; font-size: 1.1rem; }
+p { max-width: 68ch; }
+
+/* Timeline of one alert */
+.timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: step; max-width: 760px; }
+.timeline li {
+  counter-increment: step;
+  display: grid; grid-template-columns: 56px 1fr; gap: 16px;
+  padding: 0 0 28px; position: relative;
+}
+.timeline li::before {
+  content: counter(step);
+  width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--paper); border: 2px solid var(--line);
+  font-weight: 700; color: var(--ink-soft);
+}
+.timeline li::after {
+  content: ""; position: absolute; left: 19px; top: 44px; bottom: 4px;
+  width: 2px; background: var(--line);
+}
+.timeline li:last-child::after { display: none; }
+.timeline li.hot::before { background: var(--siren); border-color: var(--siren); color: #fff; }
+.timeline li.clear::before { background: var(--tile); border-color: var(--ink-soft); color: var(--ink); }
+.timeline p { margin: 0; color: var(--ink-soft); }
+
+/* Facts */
+.facts { display: grid; gap: 36px 48px; }
+@media (min-width: 760px) { .facts { grid-template-columns: 1fr 1fr; } }
+.facts p { margin: 0; color: var(--ink-soft); }
+
+/* Shots */
+.shots { display: grid; gap: 32px; }
+@media (min-width: 860px) { .shots { grid-template-columns: 1fr 1fr; } .shots figure:first-child { grid-column: 1 / -1; } }
+figure { margin: 0; }
+figure img { border-radius: 14px; border: 1px solid var(--line); background: #fff; }
+figcaption { font-size: 0.92rem; color: var(--ink-soft); margin-top: 10px; }
+
+/* Install */
+.install { display: grid; gap: 40px; }
+@media (min-width: 860px) { .install { grid-template-columns: 1fr 1fr; align-items: start; } }
+.steps { margin: 0; padding-left: 1.3em; }
+.steps li { margin-bottom: 14px; padding-left: 4px; }
+pre {
+  margin: 0; background: var(--code-bg); color: var(--code-ink);
+  border-radius: 14px; padding: 18px 20px; overflow-x: auto; font-size: 0.95rem;
+}
+.note { font-size: 0.95rem; color: var(--ink-soft); margin-top: 14px; }
+
+/* FAQ */
+.faq { max-width: 780px; }
+details { border-bottom: 1px solid var(--line); }
+details:first-of-type { border-top: 1px solid var(--line); }
+summary {
+  cursor: pointer; list-style: none; padding: 18px 36px 18px 0;
+  font-weight: 500; font-size: 1.08rem; position: relative;
+}
+summary::-webkit-details-marker { display: none; }
+summary::after {
+  content: "+"; position: absolute; right: 4px; top: 14px;
+  font-size: 1.5rem; font-weight: 400; color: var(--ink-soft);
+  transition: transform 200ms ease;
+}
+details[open] summary::after { transform: rotate(45deg); }
+details p { margin: 0 0 20px; color: var(--ink-soft); }
+@media (prefers-reduced-motion: reduce) { summary::after { transition: none; } }
+
+/* Hebrew */
+.he { direction: rtl; text-align: right; }
+.he h2, .he p, .he ul { margin-right: 0; }
+.he ul { padding-right: 1.2em; padding-left: 0; max-width: 62ch; }
+.he li { margin-bottom: 8px; }
+.he pre { direction: ltr; text-align: left; }
+
+/* Safety + footer */
+.safety {
+  border-inline-start: 4px solid var(--amber);
+  padding: 4px 0 4px 18px; max-width: 70ch; color: var(--ink-soft);
+}
+footer { padding: 48px 0 64px; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: 0.95rem; }
+footer .cols { display: flex; flex-wrap: wrap; gap: 16px 32px; justify-content: space-between; }
+footer ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px 22px; }
+</style>
+</head>
+<body>
+
+<header class="wrap top">
+  <a class="brand" href="./">
+    <img src="assets/plugin-icon.png" alt="" width="32" height="32">
+    Homebridge Red Alert
+  </a>
+  <nav aria-label="Page">
+    <a class="hide-sm" href="#how">How it works</a>
+    <a class="hide-sm" href="#install">Install</a>
+    <a href="#he" lang="he">עברית</a>
+    <a href="https://github.com/toharush/homebridge-redalert">GitHub</a>
+  </nav>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <div>
+      <h1>Homebridge Red Alert</h1>
+      <p class="he-title" lang="he" dir="rtl">צבע אדום של פיקוד העורף <span class="nowrap">ב-HomeKit</span></p>
+      <p class="lede">Israel's Pikud HaOref (Home Front Command) alerts as HomeKit sensors. When the siren sounds for your city, your lights turn red and the way to the shelter lights up.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="#install">Install the plugin</a>
+        <a class="btn btn-ghost" href="https://github.com/toharush/homebridge-redalert">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+      <p class="verified"><strong>Homebridge Verified</strong>, free and open source under the MIT license.</p>
+    </div>
+
+    <div class="phone-col">
+      <div class="phone" id="phone" role="img" aria-label="Home app preview: the Red Alert sensor for Home detects an alert, and the hallway light, shelter light and HomePod switch on.">
+        <div class="screen">
+          <div class="screen-head"><b>Home</b><span>Tel Aviv - City Center</span></div>
+          <p class="status-line" id="status">All quiet.</p>
+          <div class="tiles">
+            <div class="tile sensor">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a1 1 0 0 1 1 1v1.07A8 8 0 0 1 20 12v5l1.7 1.7a1 1 0 0 1-.7 1.7H3a1 1 0 0 1-.7-1.7L4 17v-5a8 8 0 0 1 7-7.93V3a1 1 0 0 1 1-1zm-2 19h4a2 2 0 0 1-4 0z"/></svg>
+              <div class="txt"><span class="name">Red Alert – Home</span><span class="state" data-on="Motion detected" data-off="No motion">No motion</span></div>
+            </div>
+            <div class="tile lit">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21h6v-1H9v1zm3-19a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2z"/></svg>
+              <span class="name">Living room</span><span class="state" data-on="Red, 100%" data-off="Off">Off</span>
+            </div>
+            <div class="tile lit amber">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21h6v-1H9v1zm3-19a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2z"/></svg>
+              <span class="name">Hallway</span><span class="state" data-on="On" data-off="Off">Off</span>
+            </div>
+            <div class="tile lit amber">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V9l8-6 8 6v12h-6v-6h-4v6H4z"/></svg>
+              <span class="name">Shelter (Mamad)</span><span class="state" data-on="On" data-off="Off">Off</span>
+            </div>
+            <div class="tile lit">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c3.3 0 6 2.2 6 5v10c0 2.8-2.7 5-6 5s-6-2.2-6-5V7c0-2.8 2.7-5 6-5zm0 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+              <span class="name">HomePod</span><span class="state" data-on="Playing alarm" data-off="Paused">Paused</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <button class="replay" id="replay" type="button" hidden>Play the alert again</button>
+    </div>
+  </div>
+
+  <section id="how" class="band">
+    <div class="wrap">
+      <h2>What happens during an alert</h2>
+      <p class="intro">Each location you set up (home, office, your parents' place) becomes its own HomeKit motion sensor. Here is one alert from start to finish.</p>
+      <ol class="timeline">
+        <li class="hot"><div><h3>The siren sounds for your city</h3><p>Pikud HaOref (polled every second) and Tzofar (pushed over a WebSocket in about 50 ms) both report it. The first one in wins, and the duplicate is dropped.</p></div></li>
+        <li class="hot"><div><h3>Your sensor switches on</h3><p>Only sensors watching that city or zone react. A nationwide alert (רחבי הארץ) switches on every sensor. Drills are ignored.</p></div></li>
+        <li class="hot"><div><h3>Your automations run</h3><p>Lights turn red, the hallway and shelter (ממ"ד) light up, the HomePod sounds an alarm and you get a Home app notification. Webhooks can also notify Home Assistant, Node-RED or n8n.</p></div></li>
+        <li class="clear"><div><h3>The event ends and the sensor switches off</h3><p>The sensor clears on the Home Front Command's "event ended" message. If every source goes offline, a timer clears it anyway, so it is never stuck on.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Built for the moment it matters</h2>
+      <div class="facts">
+        <div><h3>Two sources at once</h3><p>Pikud HaOref and Tzofar run in parallel. Mako, Prog.co.il and Kumta Telegram channels can be added as backups from the built-in marketplace.</p></div>
+        <div><h3>Every alert type</h3><p>Rockets and missiles, hostile UAVs, terrorist infiltration, early warnings, earthquakes, tsunami, hazardous materials and non-conventional threats. Each sensor picks the types it reacts to.</p></div>
+        <div><h3>All 1,450 alert zones</h3><p>Pick cities from a searchable Hebrew list with their area shown. Prefix matching covers sub-areas, so תל אביב includes every Tel Aviv zone.</p></div>
+        <div><h3>A health check you can automate</h3><p>An optional HomeKit switch turns off when no alert source is reachable, so you find out before you need it.</p></div>
+        <div><h3>Tested for life-safety cases</h3><p>Over 340 tests, including checks that a new alert always beats an "ended" message and that another city's all-clear never switches off yours.</p></div>
+        <div><h3>Private by design</h3><p>No account, no sign-up, no telemetry. The plugin only talks to the alert sources and the webhooks you set up.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <h2>The settings page</h2>
+      <p class="intro">Everything is set up inside the Homebridge UI, with dark mode and inline validation.</p>
+      <div class="shots">
+        <figure>
+          <img src="assets/coverage-map.png" width="1036" height="381" loading="lazy" alt="Homebridge Red Alert coverage map with monitored cities and live Tzeva Adom alerts pulsing in red">
+          <figcaption>The coverage map shows the cities each sensor watches, with live alerts in red.</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/sensor-settings.png" width="936" height="524" loading="lazy" alt="Sensor settings in Homebridge Red Alert: cities picker and alert type filters">
+          <figcaption>Each sensor has its own cities and alert types.</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/alert-history.png" width="968" height="449" loading="lazy" alt="Pikud HaOref alert history with filters in the Homebridge Red Alert settings">
+          <figcaption>Alert history with filters by city, type and source.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap install">
+      <div>
+        <h2>Install in a few minutes</h2>
+        <ol class="steps">
+          <li>In the Homebridge UI, open <b>Plugins</b> and search for <code>red alert</code> or <code>pikud haoref</code>. Install <b>Red Alert (Pikud HaOref)</b> by toharush.</li>
+          <li>Open the plugin settings, add a sensor and pick your cities, for example <span lang="he">תל אביב - מרכז העיר</span>.</li>
+          <li>Restart Homebridge. A motion sensor appears in the Home app. Build your automations on it.</li>
+        </ol>
+      </div>
+      <div>
+        <p>Prefer the terminal? Install it with npm:</p>
+        <pre><code>npm install -g @toharush/homebridge-redalert</code></pre>
+        <p class="note">Requires Homebridge 1.6 or 2.0 and Node.js 22, 24 or 25. Full options are in the <a href="https://github.com/toharush/homebridge-redalert#configuration">configuration guide on GitHub</a>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap"><div class="faq">
+      <h2>Questions</h2>
+      <details><summary>Is this an official Pikud HaOref app?</summary><p>No. It is a community plugin that reads the public Pikud HaOref alert feed and other public sources. Keep the official Home Front Command app and sirens as your primary warning.</p></details>
+      <details><summary>How fast are the alerts?</summary><p>Tzofar pushes alerts in about 50 ms and Pikud HaOref is polled every second. Whichever reports first triggers your sensor.</p></details>
+      <details><summary>Is it the same as the <code>homebridge-redalert</code> package?</summary><p>No. The unscoped <code>homebridge-redalert</code> npm package is an unrelated plugin from 2021. This one is <code>@toharush/homebridge-redalert</code>, the Homebridge Verified Red Alert plugin.</p></details>
+      <details><summary>Does it work if Homebridge runs outside Israel?</summary><p>The Pikud HaOref API may block requests from outside Israel. Tzofar keeps working, and the Mako source from the marketplace has no geo-restriction.</p></details>
+      <details><summary>Do more sensors mean more network traffic?</summary><p>No. All sensors share one alert pipeline, so 1 sensor or 20 use the same connections.</p></details>
+      <details><summary>Does it cost anything?</summary><p>No. It is free and open source under the MIT license.</p></details>
+    </div></div>
+  </section>
+
+  <section id="he" class="he" lang="he" dir="rtl">
+    <div class="wrap">
+      <h2>התרעות צבע אדום של פיקוד העורף בבית החכם</h2>
+      <p class="intro"><b><bdi>Homebridge Red Alert</bdi></b> הוא תוסף Homebridge מאומת שמחבר את התרעות צבע אדום של פיקוד העורף ל-Apple HomeKit. לכל מיקום שתגדירו (בית, עבודה, הורים) נוצר חיישן תנועה, שנדלק כשיש התרעה באחת הערים שבחרתם ונכבה כשמתקבלת הודעת "האירוע הסתיים".</p>
+      <ul>
+        <li>אוטומציות באפליקציית הבית: להדליק את האורות באדום, להדליק את האור בממ"ד, להשמיע אזעקה ב-HomePod</li>
+        <li>התרעות מפיקוד העורף ומצופר במקביל, בלי כפילויות</li>
+        <li>ירי רקטות וטילים, חדירת כלי טיס עוין, חדירת מחבלים, התרעה מוקדמת, רעידת אדמה ועוד</li>
+        <li>בחירה מתוך 1,450 אזורי התרעה, מפת כיסוי חיה והיסטוריית התרעות</li>
+        <li>תרגילים לא מפעילים את החיישן, והוא נכבה אוטומטית גם אם כל המקורות לא זמינים</li>
+        <li>חינמי וקוד פתוח</li>
+      </ul>
+      <p><b>התקנה:</b> בממשק Homebridge חפשו <code>red alert</code> או <code>pikud haoref</code> והתקינו את <b><bdi>Red Alert (Pikud HaOref)</bdi></b>, או הריצו:</p>
+      <pre><code>npm install -g @toharush/homebridge-redalert</code></pre>
+      <p>הקוד והתיעוד המלא: <a href="https://github.com/toharush/homebridge-redalert" lang="en" dir="ltr">Homebridge Red Alert ב-GitHub</a></p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <p class="safety">Homebridge Red Alert is a community project and is not affiliated with Pikud HaOref or the Israel Defense Forces. Use it alongside the official Home Front Command app and sirens, never instead of them.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap cols">
+    <span>Homebridge Red Alert, by <a href="https://github.com/toharush">toharush</a>. MIT license.</span>
+    <ul>
+      <li><a href="https://github.com/toharush/homebridge-redalert">Homebridge Red Alert on GitHub</a></li>
+      <li><a href="https://www.npmjs.com/package/@toharush/homebridge-redalert">@toharush/homebridge-redalert on npm</a></li>
+      <li><a href="https://github.com/toharush/homebridge-redalert/issues">Report an issue</a></li>
+      <li><a href="https://github.com/homebridge/homebridge/wiki/Verified-Plugins">Homebridge Verified Plugins</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var phone = document.getElementById('phone');
+  var status = document.getElementById('status');
+  var replay = document.getElementById('replay');
+  var states = phone.querySelectorAll('.state');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function set(on) {
+    phone.classList.toggle('alerting', on);
+    status.textContent = on ? 'Rockets and missiles: alert in your area.' : 'All quiet.';
+    states.forEach(function (s) { s.textContent = on ? s.dataset.on : s.dataset.off; });
+  }
+  function play() {
+    set(false);
+    replay.hidden = true;
+    setTimeout(function () { set(true); replay.hidden = false; }, reduce ? 0 : 1400);
+  }
+  replay.addEventListener('click', play);
+  play();
+})();
+</script>
+</body>
+</html>

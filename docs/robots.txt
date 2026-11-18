@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://toharush.github.io/homebridge-redalert/sitemap.xml
